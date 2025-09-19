@@ -1,4 +1,3 @@
 
-print("Plugins module loaded")
 
-return{}
+return {}

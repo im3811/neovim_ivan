@@ -6,71 +6,145 @@ return {
       require("mason").setup()
     end,
   },
-  --Mason-LSPConfig: Bridge between Mason and nvim-lspconfig
+  
+  -- Mason-LSPConfig: Bridge between Mason and nvim-lspconfig
   {
     "williamboman/mason-lspconfig.nvim",
-    dependencies = { "williamboman/mason.nvim" }, 
+    dependencies = { "williamboman/mason.nvim" },
     config = function()
       require("mason-lspconfig").setup({
-      ensure_installed = {
-        "intelephense", -- PHP LSP
-        "pyright",      -- Python LSP
-        "rust_analyzer", -- Rust LSP
-      },
-      automatic_installation = true,
-    })
-  end,
+        ensure_installed = {
+          "intelephense", -- PHP LSP
+          "pyright",      -- Python LSP
+          "rust_analyzer", -- Rust LSP
+        },
+        automatic_installation = true,
+      })
+    end,
   },
   
-  -- nvim-lspconfig: Configure LSP servers
+  -- LSP Configuration using Neovim 0.11+ native API
   {
-    "neovim/nvim-lspconfig",
-    dependencies = {
-      "williamboman/mason-lspconfig.nvim",
-      "hrsh7th/cmp-nvim-lsp", -- Autocompletion
-    },
-    config = function() 
-      local lspconfig = require("lspconfig")
+    "hrsh7th/cmp-nvim-lsp",
+    config = function()
       -- Get capabilities for autocompletion
-      local capabilities = require("cmp_nvim_lsp").default_capabilities() 
+      local capabilities = require("cmp_nvim_lsp").default_capabilities()
       
-      -- Setup PHP LSP (Intelephense)
-      lspconfig.intelephense.setup ({ 
-        capabilities = capabilities, 
-        root_dir = function (fname)
-          return lspconfig.util.root_pattern("composer.json", ".git", "index.php")(fname)
-            or lspconfig.util.path.dirname(fname)
+      -- Common on_attach function for all LSPs
+      local on_attach = function(client, bufnr)
+        -- Enable completion triggered by <c-x><c-o>
+        vim.api.nvim_set_option_value('omnifunc', 'v:lua.vim.lsp.omnifunc', { buf = bufnr })
+        
+        -- Mappings
+        local opts = { buffer = bufnr, noremap = true, silent = true }
+        local keymap = vim.keymap.set
+        
+        -- Navigation
+        keymap("n", "gd", vim.lsp.buf.definition, vim.tbl_extend("force", opts, { desc = "Go to definition" }))
+        keymap("n", "gr", vim.lsp.buf.references, vim.tbl_extend("force", opts, { desc = "Show references" }))
+        keymap("n", "gi", vim.lsp.buf.implementation, vim.tbl_extend("force", opts, { desc = "Go to implementation" }))
+        keymap("n", "gt", vim.lsp.buf.type_definition, vim.tbl_extend("force", opts, { desc = "Go to type definition" }))
+        
+        -- Documentation
+        keymap("n", "K", vim.lsp.buf.hover, vim.tbl_extend("force", opts, { desc = "Hover documentation" }))
+        keymap("n", "<leader>sh", vim.lsp.buf.signature_help, vim.tbl_extend("force", opts, { desc = "Signature help" }))
+        
+        -- Code actions
+        keymap("n", "<leader>ca", vim.lsp.buf.code_action, vim.tbl_extend("force", opts, { desc = "Code actions" }))
+        keymap("n", "<leader>rn", vim.lsp.buf.rename, vim.tbl_extend("force", opts, { desc = "Rename symbol" }))
+        
+        -- Formatting
+        keymap("n", "<leader>f", function()
+          vim.lsp.buf.format({ async = true })
+        end, vim.tbl_extend("force", opts, { desc = "Format code" }))
+        
+        -- Workspace
+        keymap("n", "<leader>wa", vim.lsp.buf.add_workspace_folder, vim.tbl_extend("force", opts, { desc = "Add workspace folder" }))
+        keymap("n", "<leader>wr", vim.lsp.buf.remove_workspace_folder, vim.tbl_extend("force", opts, { desc = "Remove workspace folder" }))
+        keymap("n", "<leader>wl", function()
+          print(vim.inspect(vim.lsp.buf.list_workspace_folders()))
+        end, vim.tbl_extend("force", opts, { desc = "List workspace folders" }))
+      end
+      
+      -- Helper function to find project root
+      local function find_root(markers, fname)
+        local path = fname
+        for _ = 1, 10 do
+          for _, marker in ipairs(markers) do
+            if vim.fn.filereadable(path .. '/' .. marker) == 1 or
+               vim.fn.isdirectory(path .. '/' .. marker) == 1 then
+              return path
+            end
+          end
+          local parent = vim.fn.fnamemodify(path, ':h')
+          if parent == path then
+            break
+          end
+          path = parent
+        end
+        return vim.fn.getcwd()
+      end
+      
+      -- Configure PHP LSP (Intelephense)
+      vim.lsp.config('intelephense', {
+        cmd = { 'intelephense', '--stdio' },
+        filetypes = { 'php' },
+        on_attach = on_attach,
+        capabilities = capabilities,
+        root_dir = function(fname)
+          return find_root({ 'composer.json', '.git', 'index.php' }, fname)
         end,
         settings = {
           intelephense = {
             files = {
               maxSize = 1000000,
-              associations = {"*.php", "*.phtml"},
+              associations = { "*.php", "*.phtml" },
             },
             environment = {
               includePaths = {},
             },
           },
         },
-      }) 
+      })
       
-      -- Setup Python LSP (Pyright)
-      lspconfig.pyright.setup({
+      -- Configure Python LSP (Pyright)
+      vim.lsp.config('pyright', {
+        cmd = { 'pyright-langserver', '--stdio' },
+        filetypes = { 'python' },
+        on_attach = on_attach,
         capabilities = capabilities,
+        root_dir = function(fname)
+          return find_root({
+            'pyproject.toml',
+            'setup.py',
+            'setup.cfg',
+            'requirements.txt',
+            'Pipfile',
+            'pyrightconfig.json',
+            '.git'
+          }, fname)
+        end,
         settings = {
           python = {
             analysis = {
               autoSearchPaths = true,
               useLibraryCodeForTypes = true,
               diagnosticMode = "workspace",
+              typeCheckingMode = "basic",
             },
           },
         },
       })
       
-      -- Setup Rust LSP (rust-analyzer)
-      lspconfig.rust_analyzer.setup({
+      -- Configure Rust LSP (rust-analyzer)
+      vim.lsp.config('rust_analyzer', {
+        cmd = { 'rust-analyzer' },
+        filetypes = { 'rust' },
+        on_attach = on_attach,
         capabilities = capabilities,
+        root_dir = function(fname)
+          return find_root({ 'Cargo.toml', '.git' }, fname)
+        end,
         settings = {
           ["rust-analyzer"] = {
             cargo = {
@@ -78,16 +152,18 @@ return {
               loadOutDirsFromCheck = true,
               runBuildScripts = true,
             },
-            -- Fixed: checkOnSave should be a boolean or have the correct structure
             checkOnSave = {
               enable = true,
-              command = "clippy", -- Use clippy for linting
+              command = "clippy",
             },
             procMacro = {
               enable = true,
             },
             diagnostics = {
               enable = true,
+              experimental = {
+                enable = true,
+              },
             },
             inlayHints = {
               bindingModeHints = {
@@ -124,32 +200,51 @@ return {
           },
         },
       })
-  
-      -- LSP keymaps (works for all languages)
-      local keymap = vim.keymap
-      -- Navigation 
-      keymap.set("n", "gd", vim.lsp.buf.definition, { desc = "Go to definition" })
-      keymap.set("n", "gr", vim.lsp.buf.references, { desc = "Show references" }) 
-      keymap.set("n", "gi", vim.lsp.buf.implementation, { desc = "Go to implementation" })
       
-      -- Documentation
-      keymap.set("n", "K", vim.lsp.buf.hover, { desc = "Hover documentation" })
-      keymap.set("n", "<leader>sh", vim.lsp.buf.signature_help, { desc = "Signature help" })
+      -- Enable the configured LSP servers
+      vim.lsp.enable('intelephense')
+      vim.lsp.enable('pyright')
+      vim.lsp.enable('rust_analyzer')
       
-      -- Code actions 
-      keymap.set("n", "<leader>ca", vim.lsp.buf.code_action, { desc = "Code actions" })
-      keymap.set("n", "<leader>rn", vim.lsp.buf.rename, { desc = "Rename symbol" })
+      -- Global diagnostics configuration
+      vim.diagnostic.config({
+        virtual_text = {
+          prefix = '●',
+          source = "if_many",
+        },
+        float = {
+          source = "always",
+          border = "rounded",
+        },
+        signs = true,
+        underline = true,
+        update_in_insert = false,
+        severity_sort = true,
+      })
       
-      -- Formatting 
-      keymap.set("n", "<leader>f", function()
-        vim.lsp.buf.format({ async = true })
-      end, { desc = "Format code" })
+      -- Diagnostic signs
+      local signs = { Error = " ", Warn = " ", Hint = " ", Info = " " }
+      for type, icon in pairs(signs) do
+        local hl = "DiagnosticSign" .. type
+        vim.fn.sign_define(hl, { text = icon, texthl = hl, numhl = hl })
+      end
       
-      -- Diagnostics (errors/warnings)
-      keymap.set("n", "[d", vim.diagnostic.goto_prev, { desc = "Previous diagnostic" }) 
-      keymap.set("n", "]d", vim.diagnostic.goto_next, { desc = "Next diagnostic" })
-      -- Show error details 
-      keymap.set("n", "<leader>e", vim.diagnostic.open_float, { desc = "Show diagnostic details" }) 
+      -- Global diagnostic keymaps (not buffer-specific)
+      vim.keymap.set("n", "[d", vim.diagnostic.goto_prev, { desc = "Previous diagnostic" })
+      vim.keymap.set("n", "]d", vim.diagnostic.goto_next, { desc = "Next diagnostic" })
+      vim.keymap.set("n", "<leader>e", vim.diagnostic.open_float, { desc = "Show diagnostic details" })
+      vim.keymap.set("n", "<leader>q", vim.diagnostic.setloclist, { desc = "Set diagnostics to loclist" })
+      
+      -- Border for hover and signature help
+      vim.lsp.handlers["textDocument/hover"] = vim.lsp.with(
+        vim.lsp.handlers.hover,
+        { border = "rounded" }
+      )
+      
+      vim.lsp.handlers["textDocument/signatureHelp"] = vim.lsp.with(
+        vim.lsp.handlers.signature_help,
+        { border = "rounded" }
+      )
     end,
   },
 }
