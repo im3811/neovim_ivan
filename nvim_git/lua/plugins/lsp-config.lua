@@ -16,7 +16,7 @@ return {
         ensure_installed = {
           "intelephense", -- PHP LSP
           "pyright",      -- Python LSP
-          "rust_analyzer", -- Rust LSP
+          -- rust_analyzer removed - handled by rustaceanvim
         },
         automatic_installation = true,
       })
@@ -136,77 +136,14 @@ return {
         },
       })
       
-      -- Configure Rust LSP (rust-analyzer)
-      vim.lsp.config('rust_analyzer', {
-        cmd = { 'rust-analyzer' },
-        filetypes = { 'rust' },
-        on_attach = on_attach,
-        capabilities = capabilities,
-        root_dir = function(fname)
-          return find_root({ 'Cargo.toml', '.git' }, fname)
-        end,
-        settings = {
-          ["rust-analyzer"] = {
-            cargo = {
-              allFeatures = true,
-              loadOutDirsFromCheck = true,
-              runBuildScripts = true,
-            },
-            checkOnSave = {
-              enable = true,
-              command = "clippy",
-            },
-            procMacro = {
-              enable = true,
-            },
-            diagnostics = {
-              enable = true,
-              experimental = {
-                enable = true,
-              },
-            },
-            inlayHints = {
-              bindingModeHints = {
-                enable = true,
-              },
-              chainingHints = {
-                enable = true,
-              },
-              closingBraceHints = {
-                enable = true,
-                minLines = 25,
-              },
-              closureReturnTypeHints = {
-                enable = "never",
-              },
-              lifetimeElisionHints = {
-                enable = "never",
-                useParameterNames = false,
-              },
-              maxLength = 25,
-              parameterHints = {
-                enable = true,
-              },
-              reborrowHints = {
-                enable = "never",
-              },
-              renderColons = true,
-              typeHints = {
-                enable = true,
-                hideClosureInitialization = false,
-                hideNamedConstructor = false,
-              },
-            },
-          },
-        },
-      })
+      -- Rust LSP is now handled by rustaceanvim plugin
+      -- No manual rust_analyzer configuration needed
       
-      -- Enable the configured LSP servers
+      -- Enable the configured LSP servers (rust_analyzer removed)
       vim.lsp.enable('intelephense')
       vim.lsp.enable('pyright')
-      vim.lsp.enable('rust_analyzer')
       
-      -- Global diagnostics configuration
+      -- FIXED: Global diagnostics configuration with modern approach
       vim.diagnostic.config({
         virtual_text = {
           prefix = '●',
@@ -216,18 +153,30 @@ return {
           source = "always",
           border = "rounded",
         },
-        signs = true,
+        signs = {
+          text = {
+            [vim.diagnostic.severity.ERROR] = " ",
+            [vim.diagnostic.severity.WARN] = " ",
+            [vim.diagnostic.severity.INFO] = " ",
+            [vim.diagnostic.severity.HINT] = " ",
+          },
+          linehl = {
+            [vim.diagnostic.severity.ERROR] = 'DiagnosticSignError',
+            [vim.diagnostic.severity.WARN] = 'DiagnosticSignWarn',
+            [vim.diagnostic.severity.INFO] = 'DiagnosticSignInfo',
+            [vim.diagnostic.severity.HINT] = 'DiagnosticSignHint',
+          },
+          numhl = {
+            [vim.diagnostic.severity.ERROR] = 'DiagnosticSignError',
+            [vim.diagnostic.severity.WARN] = 'DiagnosticSignWarn',
+            [vim.diagnostic.severity.INFO] = 'DiagnosticSignInfo',
+            [vim.diagnostic.severity.HINT] = 'DiagnosticSignHint',
+          },
+        },
         underline = true,
         update_in_insert = false,
         severity_sort = true,
       })
-      
-      -- Diagnostic signs
-      local signs = { Error = " ", Warn = " ", Hint = " ", Info = " " }
-      for type, icon in pairs(signs) do
-        local hl = "DiagnosticSign" .. type
-        vim.fn.sign_define(hl, { text = icon, texthl = hl, numhl = hl })
-      end
       
       -- Global diagnostic keymaps (not buffer-specific)
       vim.keymap.set("n", "[d", vim.diagnostic.goto_prev, { desc = "Previous diagnostic" })

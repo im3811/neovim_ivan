@@ -48,7 +48,7 @@ if vim.fn.isdirectory(undodir) == 0 then
   vim.fn.mkdir(undodir, "p")
 end
 
--- Run current file (UPDATED with Rust support)
+-- Run current file (FIXED with better Rust support)
 vim.keymap.set("n", "<leader>r", function()
   local filetype = vim.bo.filetype
   local filename = vim.fn.expand("%")
@@ -74,26 +74,36 @@ vim.keymap.set("n", "<leader>r", function()
       -- We're in a Cargo project
       local project_root = vim.fn.fnamemodify(cargo_toml, ":h")
       
-      -- Check if this is a bin file in src/bin/
-      if string.find(filepath, "/bin/") then
-        -- Extract the binary name from the file path
-        local bin_name = vim.fn.fnamemodify(filename, ":t:r")
-        -- Try to run as a cargo binary first, if it fails it will show the error
-        -- User needs to add [[bin]] entry in Cargo.toml for it to work
-        vim.cmd("botright split | terminal cd " .. project_root .. " && cargo run --bin " .. bin_name .. " 2>&1 || (echo 'Failed to run as cargo binary. Add [[bin]] entry to Cargo.toml:' && echo '[[bin]]' && echo 'name = \"" .. bin_name .. "\"' && echo 'path = \"src/bin/" .. filename .. "\"')")
+      -- Extract just the filename without path for binary name
+      local bin_name = vim.fn.fnamemodify(filename, ":t:r")
+      
+      -- Check if this is a configured binary (check Cargo.toml)
+      local cargo_content = vim.fn.readfile(cargo_toml)
+      local has_bin_config = false
+      
+      for _, line in ipairs(cargo_content) do
+        if string.match(line, 'name%s*=%s*["\']' .. bin_name .. '["\']') then
+          has_bin_config = true
+          break
+        end
+      end
+      
+      if has_bin_config then
+        -- It's a configured binary, use cargo run
+        vim.cmd("botright split | terminal cd " .. vim.fn.shellescape(project_root) .. " && cargo run --bin " .. bin_name)
       elseif string.find(filename, "^main%.rs$") or string.find(filepath, "/src/main%.rs$") then
         -- It's main.rs, run the default binary
-        vim.cmd("botright split | terminal cd " .. project_root .. " && cargo run")
+        vim.cmd("botright split | terminal cd " .. vim.fn.shellescape(project_root) .. " && cargo run")
       else
-        -- It's some other .rs file in the project
-        -- Just compile and run it standalone with rustc
-        local exe_name = vim.fn.fnamemodify(filename, ":r")
-        vim.cmd("botright split | terminal rustc " .. filepath .. " -o /tmp/" .. exe_name .. " && /tmp/" .. exe_name)
+        -- It's some other .rs file in the project, compile and run standalone
+        -- Use a simple filename for the executable
+        local simple_exe_name = bin_name
+        vim.cmd("botright split | terminal cd " .. vim.fn.shellescape(project_root) .. " && rustc " .. vim.fn.shellescape(filepath) .. " -o /tmp/" .. simple_exe_name .. " && /tmp/" .. simple_exe_name)
       end
     else
       -- Not in a Cargo project, compile and run single file
-      local exe_name = vim.fn.fnamemodify(filename, ":r")
-      vim.cmd("botright split | terminal rustc " .. filename .. " -o /tmp/" .. exe_name .. " && /tmp/" .. exe_name)
+      local simple_exe_name = vim.fn.fnamemodify(filename, ":t:r")
+      vim.cmd("botright split | terminal rustc " .. vim.fn.shellescape(filepath) .. " -o /tmp/" .. simple_exe_name .. " && /tmp/" .. simple_exe_name)
     end
     
     vim.cmd("resize 10")
@@ -208,3 +218,52 @@ _G.disable_touchpad = function()
   disable_mouse()
   disable_touchpad_system()
 end
+
+-- Auto change directory to project root for Rust files AND handle binaries
+vim.api.nvim_create_autocmd("BufEnter", {
+  pattern = "*.rs",
+  callback = function()
+    local current_file = vim.fn.expand("%:p")
+    if current_file == "" or vim.fn.filereadable(current_file) == 0 then
+      return
+    end
+    
+    -- Find Cargo.toml by going up directories
+    local function find_cargo_root(path)
+      local dir = vim.fn.fnamemodify(path, ':h')
+      while dir ~= '/' and dir ~= '.' do
+        if vim.fn.filereadable(dir .. '/Cargo.toml') == 1 then
+          return dir
+        end
+        dir = vim.fn.fnamemodify(dir, ':h')
+      end
+      return nil
+    end
+    
+    local project_root = find_cargo_root(current_file)
+    if project_root then
+      local current_cwd = vim.fn.getcwd()
+      
+      -- Change directory if needed
+      if current_cwd ~= project_root then
+        vim.cmd('cd ' .. project_root)
+        vim.notify("Changed to project root: " .. project_root, vim.log.levels.INFO)
+        
+        -- For binary files, force rust-analyzer restart after directory change
+        local is_binary_file = string.find(current_file, "/bin/") ~= nil
+        if is_binary_file then
+          vim.defer_fn(function()
+            vim.cmd("LspRestart rust_analyzer")
+            vim.notify("Restarted rust-analyzer for binary: " .. vim.fn.fnamemodify(current_file, ":t"), vim.log.levels.INFO)
+          end, 1500) -- Give it time to settle after cd
+        end
+      end
+    end
+  end,
+})
+
+-- Manual reload command for stubborn cases
+vim.keymap.set("n", "<leader>rr", function()
+  vim.cmd("LspRestart rust_analyzer")
+  vim.notify("Manually restarted rust-analyzer", vim.log.levels.INFO)
+end, { desc = "Restart rust-analyzer" })
