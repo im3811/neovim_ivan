@@ -1,5 +1,3 @@
--- Replace your entire rustaceanvim.lua file with this:
-
 return {
   {
     'mrcjkb/rustaceanvim',
@@ -28,38 +26,6 @@ return {
         local root = search_upward(current_dir)
         if root then
           return root
-        end
-        
-        -- Fallback: search common Rust project locations
-        local home = os.getenv("HOME")
-        local common_paths = {
-          home .. "/Desktop",
-          home .. "/Documents", 
-          home .. "/Code",
-          home .. "/Projects",
-          vim.fn.getcwd(),
-        }
-        
-        for _, base_path in ipairs(common_paths) do
-          if vim.fn.isdirectory(base_path) == 1 then
-            local handle = vim.loop.fs_scandir(base_path)
-            if handle then
-              while true do
-                local name, type = vim.loop.fs_scandir_next(handle)
-                if not name then break end
-                
-                if type == "directory" then
-                  local potential_cargo = base_path .. "/" .. name .. "/Cargo.toml"
-                  if vim.fn.filereadable(potential_cargo) == 1 then
-                    -- Check if this project contains our file
-                    if string.find(fname, base_path .. "/" .. name) then
-                      return base_path .. "/" .. name
-                    end
-                  end
-                end
-              end
-            end
-          end
         end
         
         return vim.fn.getcwd() -- ultimate fallback
@@ -96,14 +62,6 @@ return {
             keymap("n", "<leader>f", function()
               vim.lsp.buf.format({ async = true })
             end, vim.tbl_extend("force", opts, { desc = "Format code" }))
-            
-            -- Rustaceanvim specific keymaps
-            keymap("n", "<leader>rr", function() vim.cmd.RustLsp('runnables') end, vim.tbl_extend("force", opts, { desc = "Rust runnables" }))
-            keymap("n", "<leader>rt", function() vim.cmd.RustLsp('testables') end, vim.tbl_extend("force", opts, { desc = "Rust testables" }))
-            keymap("n", "<leader>rd", function() vim.cmd.RustLsp('debuggables') end, vim.tbl_extend("force", opts, { desc = "Rust debuggables" }))
-            keymap("n", "<leader>re", function() vim.cmd.RustLsp('explainError') end, vim.tbl_extend("force", opts, { desc = "Explain error" }))
-            keymap("n", "<leader>rc", function() vim.cmd.RustLsp('openCargo') end, vim.tbl_extend("force", opts, { desc = "Open Cargo.toml" }))
-            keymap("n", "<leader>rp", function() vim.cmd.RustLsp('parentModule') end, vim.tbl_extend("force", opts, { desc = "Parent module" }))
           end,
           
           -- Custom root directory detection

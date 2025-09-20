@@ -48,22 +48,22 @@ if vim.fn.isdirectory(undodir) == 0 then
   vim.fn.mkdir(undodir, "p")
 end
 
--- Run current file (FIXED with better Rust support)
+-- Run current file (FIXED with vertical terminal split)
 vim.keymap.set("n", "<leader>r", function()
   local filetype = vim.bo.filetype
   local filename = vim.fn.expand("%")
   local filepath = vim.fn.expand("%:p")
 
   if filetype == "php" then
-    -- Use terminal split for cleaner output
-    vim.cmd("botright split | terminal php " .. filename)
-    vim.cmd("resize 10")
+    -- Use vertical terminal split
+    vim.cmd("rightbelow vsplit | terminal php " .. filename)
+    vim.cmd("vertical resize 80")
     vim.cmd("setlocal bufhidden=wipe")  -- Auto-delete buffer when window closes
     
   elseif filetype == "python" then
-    -- Use terminal split for cleaner output
-    vim.cmd("botright split | terminal python " .. filename)
-    vim.cmd("resize 10")
+    -- Use vertical terminal split
+    vim.cmd("rightbelow vsplit | terminal python " .. filename)
+    vim.cmd("vertical resize 80")
     vim.cmd("setlocal bufhidden=wipe")  -- Auto-delete buffer when window closes
     
   elseif filetype == "rust" then
@@ -90,23 +90,23 @@ vim.keymap.set("n", "<leader>r", function()
       
       if has_bin_config then
         -- It's a configured binary, use cargo run
-        vim.cmd("botright split | terminal cd " .. vim.fn.shellescape(project_root) .. " && cargo run --bin " .. bin_name)
+        vim.cmd("rightbelow vsplit | terminal cd " .. vim.fn.shellescape(project_root) .. " && cargo run --bin " .. bin_name)
       elseif string.find(filename, "^main%.rs$") or string.find(filepath, "/src/main%.rs$") then
         -- It's main.rs, run the default binary
-        vim.cmd("botright split | terminal cd " .. vim.fn.shellescape(project_root) .. " && cargo run")
+        vim.cmd("rightbelow vsplit | terminal cd " .. vim.fn.shellescape(project_root) .. " && cargo run")
       else
         -- It's some other .rs file in the project, compile and run standalone
         -- Use a simple filename for the executable
         local simple_exe_name = bin_name
-        vim.cmd("botright split | terminal cd " .. vim.fn.shellescape(project_root) .. " && rustc " .. vim.fn.shellescape(filepath) .. " -o /tmp/" .. simple_exe_name .. " && /tmp/" .. simple_exe_name)
+        vim.cmd("rightbelow vsplit | terminal cd " .. vim.fn.shellescape(project_root) .. " && rustc " .. vim.fn.shellescape(filepath) .. " -o /tmp/" .. simple_exe_name .. " && /tmp/" .. simple_exe_name)
       end
     else
       -- Not in a Cargo project, compile and run single file
       local simple_exe_name = vim.fn.fnamemodify(filename, ":t:r")
-      vim.cmd("botright split | terminal rustc " .. vim.fn.shellescape(filepath) .. " -o /tmp/" .. simple_exe_name .. " && /tmp/" .. simple_exe_name)
+      vim.cmd("rightbelow vsplit | terminal rustc " .. vim.fn.shellescape(filepath) .. " -o /tmp/" .. simple_exe_name .. " && /tmp/" .. simple_exe_name)
     end
     
-    vim.cmd("resize 10")
+    vim.cmd("vertical resize 80")
     vim.cmd("setlocal bufhidden=wipe")  -- Auto-delete buffer when window closes
   else
     print("No run command configured for filetype: " .. filetype)
@@ -127,7 +127,7 @@ vim.keymap.set("n", "<CR>", function()
   end
 end, { desc = "Close terminal with Enter (in terminal buffers)" })
 
--- ===== ARROW KEYS & TOUCHPAD CONTROL =====
+-- ===== SMART ARROW KEYS & TOUCHPAD CONTROL =====
 
 -- Disable arrow keys and force proper vim navigation
 local function disable_arrows()
@@ -195,18 +195,42 @@ disable_arrows()
 disable_mouse()
 disable_touchpad_system()
 
--- Manual toggle keybinding
+-- SIMPLE TERMINAL TOUCHPAD - Just enable mouse in terminal buffers
+vim.api.nvim_create_autocmd({"TermOpen", "BufEnter"}, {
+  pattern = "*",
+  callback = function()
+    if vim.bo.buftype == "terminal" then
+      -- Enable mouse only in this terminal buffer
+      vim.opt_local.mouse = "a"
+      -- Also enable system touchpad
+      enable_touchpad_system()
+    end
+  end,
+})
+
+-- Manual keybinding to enable touchpad in current buffer (for testing)
+vim.keymap.set('n', '<leader>te', function()
+  if vim.bo.buftype == "terminal" then
+    vim.opt_local.mouse = "a"
+    enable_touchpad_system()
+    vim.notify("Touchpad enabled in terminal", vim.log.levels.INFO)
+  else
+    vim.notify("Not in a terminal buffer", vim.log.levels.WARN)
+  end
+end, { desc = "Enable touchpad in terminal" })
+
+-- Manual toggle keybinding (overrides smart behavior temporarily)
 vim.keymap.set('n', '<leader>tm', function()
   if vim.opt.mouse:get() == "" then
     enable_mouse()
     enable_touchpad_system()
-    vim.notify("Mouse/Touchpad enabled", vim.log.levels.INFO)
+    vim.notify("Mouse/Touchpad manually enabled", vim.log.levels.INFO)
   else
     disable_mouse()
     disable_touchpad_system()
-    vim.notify("Mouse/Touchpad disabled", vim.log.levels.INFO)
+    vim.notify("Mouse/Touchpad manually disabled", vim.log.levels.INFO)
   end
-end, { desc = "Toggle mouse/touchpad" })
+end, { desc = "Toggle mouse/touchpad manually" })
 
 -- Store functions globally for debug integration
 _G.enable_touchpad = function()

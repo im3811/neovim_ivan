@@ -143,9 +143,11 @@ return {
       vim.lsp.enable('intelephense')
       vim.lsp.enable('pyright')
       
-      -- FIXED: Global diagnostics configuration with modern approach
+      -- FIXED: Global diagnostics configuration - ERRORS get full treatment, WARNINGS just get signs
       vim.diagnostic.config({
         virtual_text = {
+          -- Only show virtual text for errors
+          severity = { min = vim.diagnostic.severity.ERROR },
           prefix = '●',
           source = "if_many",
         },
@@ -155,25 +157,21 @@ return {
         },
         signs = {
           text = {
-            [vim.diagnostic.severity.ERROR] = " ",
-            [vim.diagnostic.severity.WARN] = " ",
-            [vim.diagnostic.severity.INFO] = " ",
-            [vim.diagnostic.severity.HINT] = " ",
+            [vim.diagnostic.severity.ERROR] = "E",
+            [vim.diagnostic.severity.WARN] = "W",
+            [vim.diagnostic.severity.INFO] = "I",
+            [vim.diagnostic.severity.HINT] = "H",
           },
           linehl = {
-            [vim.diagnostic.severity.ERROR] = 'DiagnosticSignError',
-            [vim.diagnostic.severity.WARN] = 'DiagnosticSignWarn',
-            [vim.diagnostic.severity.INFO] = 'DiagnosticSignInfo',
-            [vim.diagnostic.severity.HINT] = 'DiagnosticSignHint',
+            [vim.diagnostic.severity.ERROR] = 'DiagnosticSignError', -- Errors get line highlighting
+            -- Warnings, Info, Hints get no line highlighting
           },
           numhl = {
-            [vim.diagnostic.severity.ERROR] = 'DiagnosticSignError',
-            [vim.diagnostic.severity.WARN] = 'DiagnosticSignWarn',
-            [vim.diagnostic.severity.INFO] = 'DiagnosticSignInfo',
-            [vim.diagnostic.severity.HINT] = 'DiagnosticSignHint',
+            [vim.diagnostic.severity.ERROR] = 'DiagnosticSignError', -- Errors get number highlighting
+            -- Warnings, Info, Hints get no number highlighting
           },
         },
-        underline = true,
+        underline = true, -- Keep underlines for diagnostics
         update_in_insert = false,
         severity_sort = true,
       })
