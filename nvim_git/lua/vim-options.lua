@@ -10,27 +10,16 @@ local options = {
 
 for option_name, option_value in pairs(options) do
   vim.opt[option_name] = option_value
-  -- print("Set " .. option_name .. " = " .. tostring(option_value))
 end
 
 vim.g.mapleader = " "
 
 -- Your existing keymaps
-vim.keymap.set("n", "<leader>w", "w<CR>")
-vim.keymap.set("n", "<leader>q", "q:<CR>")
+vim.keymap.set("n", "<leader>w", ":w<CR>")
+vim.keymap.set("n", "<leader>q", ":q<CR>")
 vim.keymap.set("n", "<leader>wq", ":wq<CR>")
 
--- Window navigation with Ctrl + hjkl
-vim.keymap.set("n", "<C-h>", "<C-w>h", { desc = "Move to left window" })
-vim.keymap.set("n", "<C-j>", "<C-w>j", { desc = "Move to window below" })
-vim.keymap.set("n", "<C-k>", "<C-w>k", { desc = "Move to window above" })
-vim.keymap.set("n", "<C-l>", "<C-w>l", { desc = "Move to right window" })
-
--- Also work in terminal mode
-vim.keymap.set("t", "<C-h>", "<C-\\><C-n><C-w>h", { desc = "Move to left window from terminal" })
-vim.keymap.set("t", "<C-j>", "<C-\\><C-n><C-w>j", { desc = "Move to window below from terminal" })
-vim.keymap.set("t", "<C-k>", "<C-\\><C-n><C-w>k", { desc = "Move to window above from terminal" })
-vim.keymap.set("t", "<C-l>", "<C-\\><C-n><C-w>l", { desc = "Move to right window from terminal" })
+-- Window navigation will be set up later with touchpad control integration
 
 -- Window management shortcuts
 vim.keymap.set("n", "<leader>sv", "<C-w>v", { desc = "Split window vertically" })
@@ -48,7 +37,142 @@ if vim.fn.isdirectory(undodir) == 0 then
   vim.fn.mkdir(undodir, "p")
 end
 
--- Run current file (FIXED with vertical terminal split)
+-- ===== SMART ARROW KEYS & TOUCHPAD CONTROL =====
+
+-- Disable arrow keys and force proper vim navigation
+local function disable_arrows()
+  local modes = { 'n', 'i', 'v' }
+  local keys = { '<Up>', '<Down>', '<Left>', '<Right>' }
+
+  for _, mode in ipairs(modes) do
+    for _, key in ipairs(keys) do
+      vim.keymap.set(mode, key, '<Nop>', {
+        noremap = true,
+        silent = true,
+        desc = "Arrow keys disabled - use hjkl"
+      })
+    end
+  end
+
+  -- Show helpful reminder messages when arrow keys are pressed
+  vim.keymap.set('n', '<Up>', function()
+    vim.notify("Use 'k' to go up!", vim.log.levels.WARN, { title = "Vim Navigation" })
+  end, { desc = "Arrow key reminder" })
+
+  vim.keymap.set('n', '<Down>', function()
+    vim.notify("Use 'j' to go down!", vim.log.levels.WARN, { title = "Vim Navigation" })
+  end, { desc = "Arrow key reminder" })
+
+  vim.keymap.set('n', '<Left>', function()
+    vim.notify("Use 'h' to go left!", vim.log.levels.WARN, { title = "Vim Navigation" })
+  end, { desc = "Arrow key reminder" })
+
+  vim.keymap.set('n', '<Right>', function()
+    vim.notify("Use 'l' to go right!", vim.log.levels.WARN, { title = "Vim Navigation" })
+  end, { desc = "Arrow key reminder" })
+end
+
+-- Store simple toggle functions globally for debug integration if needed
+_G.enable_touchpad = function()
+  vim.opt_local.mouse = "a"
+end
+
+_G.disable_touchpad = function()
+  vim.opt_local.mouse = ""
+end
+
+-- Initialize with globally disabled mouse
+vim.opt.mouse = ""
+disable_arrows()
+
+-- SMART WINDOW-BASED MOUSE CONTROL
+-- Function to update mouse state for current window
+local function update_mouse_for_window()
+  local current_buf = vim.api.nvim_get_current_buf()
+  local buftype = vim.api.nvim_buf_get_option(current_buf, "buftype")
+  
+  if buftype == "terminal" then
+    vim.opt_local.mouse = "a"  -- Enable mouse ONLY in this window
+  else
+    vim.opt_local.mouse = ""   -- Disable mouse in code windows
+  end
+end
+
+-- Update mouse settings when entering any window
+vim.api.nvim_create_autocmd({"WinEnter", "BufWinEnter", "TermOpen"}, {
+  pattern = "*",
+  callback = function()
+    update_mouse_for_window()
+  end,
+})
+
+-- Ensure mouse is disabled in new windows by default
+vim.api.nvim_create_autocmd({"BufNew", "BufRead", "BufNewFile"}, {
+  pattern = "*",
+  callback = function()
+    -- Small delay to ensure buffer type is set
+    vim.defer_fn(function()
+      if vim.bo.buftype ~= "terminal" then
+        vim.opt_local.mouse = ""
+      end
+    end, 10)
+  end,
+})
+
+-- Override window navigation to update mouse state
+vim.keymap.set("n", "<C-h>", function()
+  vim.cmd("wincmd h")
+  update_mouse_for_window()
+end, { desc = "Move to left window" })
+
+vim.keymap.set("n", "<C-j>", function()
+  vim.cmd("wincmd j")
+  update_mouse_for_window()
+end, { desc = "Move to window below" })
+
+vim.keymap.set("n", "<C-k>", function()
+  vim.cmd("wincmd k")
+  update_mouse_for_window()
+end, { desc = "Move to window above" })
+
+vim.keymap.set("n", "<C-l>", function()
+  vim.cmd("wincmd l")
+  update_mouse_for_window()
+end, { desc = "Move to right window" })
+
+-- Terminal mode navigation with mouse update
+vim.keymap.set("t", "<C-h>", function()
+  vim.cmd([[normal! <C-\><C-n><C-w>h]])
+  update_mouse_for_window()
+end, { desc = "Move to left window from terminal" })
+
+vim.keymap.set("t", "<C-j>", function()
+  vim.cmd([[normal! <C-\><C-n><C-w>j]])
+  update_mouse_for_window()
+end, { desc = "Move to window below from terminal" })
+
+vim.keymap.set("t", "<C-k>", function()
+  vim.cmd([[normal! <C-\><C-n><C-w>k]])
+  update_mouse_for_window()
+end, { desc = "Move to window above from terminal" })
+
+vim.keymap.set("t", "<C-l>", function()
+  vim.cmd([[normal! <C-\><C-n><C-w>l]])
+  update_mouse_for_window()
+end, { desc = "Move to right window from terminal" })
+
+-- Manual toggle keybinding (for testing or override)
+vim.keymap.set('n', '<leader>tm', function()
+  if vim.opt_local.mouse:get() == "" then
+    vim.opt_local.mouse = "a"
+    vim.notify("Mouse enabled in current window", vim.log.levels.INFO)
+  else
+    vim.opt_local.mouse = ""
+    vim.notify("Mouse disabled in current window", vim.log.levels.INFO)
+  end
+end, { desc = "Toggle mouse in current window" })
+
+-- Run current file (with vertical terminal split)
 vim.keymap.set("n", "<leader>r", function()
   local filetype = vim.bo.filetype
   local filename = vim.fn.expand("%")
@@ -96,7 +220,6 @@ vim.keymap.set("n", "<leader>r", function()
         vim.cmd("rightbelow vsplit | terminal cd " .. vim.fn.shellescape(project_root) .. " && cargo run")
       else
         -- It's some other .rs file in the project, compile and run standalone
-        -- Use a simple filename for the executable
         local simple_exe_name = bin_name
         vim.cmd("rightbelow vsplit | terminal cd " .. vim.fn.shellescape(project_root) .. " && rustc " .. vim.fn.shellescape(filepath) .. " -o /tmp/" .. simple_exe_name .. " && /tmp/" .. simple_exe_name)
       end
@@ -126,122 +249,6 @@ vim.keymap.set("n", "<CR>", function()
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, false, true), "n", false)
   end
 end, { desc = "Close terminal with Enter (in terminal buffers)" })
-
--- ===== SMART ARROW KEYS & TOUCHPAD CONTROL =====
-
--- Disable arrow keys and force proper vim navigation
-local function disable_arrows()
-  local modes = { 'n', 'i', 'v' }
-  local keys = { '<Up>', '<Down>', '<Left>', '<Right>' }
-
-  for _, mode in ipairs(modes) do
-    for _, key in ipairs(keys) do
-      vim.keymap.set(mode, key, '<Nop>', {
-        noremap = true,
-        silent = true,
-        desc = "Arrow keys disabled - use hjkl"
-      })
-    end
-  end
-
-  -- Show helpful reminder messages when arrow keys are pressed
-  vim.keymap.set('n', '<Up>', function()
-    vim.notify("Use 'k' to go up!", vim.log.levels.WARN, { title = "Vim Navigation" })
-  end, { desc = "Arrow key reminder" })
-
-  vim.keymap.set('n', '<Down>', function()
-    vim.notify("Use 'j' to go down!", vim.log.levels.WARN, { title = "Vim Navigation" })
-  end, { desc = "Arrow key reminder" })
-
-  vim.keymap.set('n', '<Left>', function()
-    vim.notify("Use 'h' to go left!", vim.log.levels.WARN, { title = "Vim Navigation" })
-  end, { desc = "Arrow key reminder" })
-
-  vim.keymap.set('n', '<Right>', function()
-    vim.notify("Use 'l' to go right!", vim.log.levels.WARN, { title = "Vim Navigation" })
-  end, { desc = "Arrow key reminder" })
-end
-
--- Disable mouse/touchpad in Neovim
-local function disable_mouse()
-  vim.opt.mouse = "" -- Disable mouse completely in Neovim
-end
-
--- Enable mouse/touchpad in Neovim
-local function enable_mouse()
-  vim.opt.mouse = "a" -- Enable mouse in all modes
-end
-
--- System-level touchpad control functions
-local function disable_touchpad_system()
-  -- Linux/Ubuntu - adjust command for your system
-  vim.fn.system("xinput disable $(xinput list | grep -i touchpad | grep -o 'id=[0-9]*' | grep -o '[0-9]*') 2>/dev/null")
-
-  -- Alternative for different systems:
-  -- macOS: vim.fn.system("sudo kextunload /System/Library/Extensions/AppleUSBTopCase.kext/Contents/PlugIns/AppleUSBTCKeyboard.kext")
-  -- Windows: You'd need a PowerShell script
-end
-
-local function enable_touchpad_system()
-  -- Linux/Ubuntu - adjust command for your system
-  vim.fn.system("xinput enable $(xinput list | grep -i touchpad | grep -o 'id=[0-9]*' | grep -o '[0-9]*') 2>/dev/null")
-
-  -- Alternative for different systems:
-  -- macOS: vim.fn.system("sudo kextload /System/Library/Extensions/AppleUSBTopCase.kext/Contents/PlugIns/AppleUSBTCKeyboard.kext")
-end
-
--- Initialize with disabled state
-disable_arrows()
-disable_mouse()
-disable_touchpad_system()
-
--- SIMPLE TERMINAL TOUCHPAD - Just enable mouse in terminal buffers
-vim.api.nvim_create_autocmd({"TermOpen", "BufEnter"}, {
-  pattern = "*",
-  callback = function()
-    if vim.bo.buftype == "terminal" then
-      -- Enable mouse only in this terminal buffer
-      vim.opt_local.mouse = "a"
-      -- Also enable system touchpad
-      enable_touchpad_system()
-    end
-  end,
-})
-
--- Manual keybinding to enable touchpad in current buffer (for testing)
-vim.keymap.set('n', '<leader>te', function()
-  if vim.bo.buftype == "terminal" then
-    vim.opt_local.mouse = "a"
-    enable_touchpad_system()
-    vim.notify("Touchpad enabled in terminal", vim.log.levels.INFO)
-  else
-    vim.notify("Not in a terminal buffer", vim.log.levels.WARN)
-  end
-end, { desc = "Enable touchpad in terminal" })
-
--- Manual toggle keybinding (overrides smart behavior temporarily)
-vim.keymap.set('n', '<leader>tm', function()
-  if vim.opt.mouse:get() == "" then
-    enable_mouse()
-    enable_touchpad_system()
-    vim.notify("Mouse/Touchpad manually enabled", vim.log.levels.INFO)
-  else
-    disable_mouse()
-    disable_touchpad_system()
-    vim.notify("Mouse/Touchpad manually disabled", vim.log.levels.INFO)
-  end
-end, { desc = "Toggle mouse/touchpad manually" })
-
--- Store functions globally for debug integration
-_G.enable_touchpad = function()
-  enable_mouse()
-  enable_touchpad_system()
-end
-
-_G.disable_touchpad = function()
-  disable_mouse()
-  disable_touchpad_system()
-end
 
 -- Auto change directory to project root for Rust files AND handle binaries
 vim.api.nvim_create_autocmd("BufEnter", {
