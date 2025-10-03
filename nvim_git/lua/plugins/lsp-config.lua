@@ -139,9 +139,80 @@ return {
       -- Rust LSP is now handled by rustaceanvim plugin
       -- No manual rust_analyzer configuration needed
       
-      -- Enable the configured LSP servers (rust_analyzer removed)
+      -- Enable the configured LSP servers
       vim.lsp.enable('intelephense')
       vim.lsp.enable('pyright')
+      
+      -- CRITICAL FIX: Auto-start LSP servers when opening files
+      -- This is what was missing - the new API requires explicit autocommands
+      vim.api.nvim_create_autocmd("FileType", {
+        pattern = "php",
+        callback = function(args)
+          vim.lsp.start({
+            name = 'intelephense',
+            cmd = { 'intelephense', '--stdio' },
+            filetypes = { 'php' },
+            on_attach = on_attach,
+            capabilities = capabilities,
+            root_dir = find_root({ 'composer.json', '.git', 'index.php' }, vim.api.nvim_buf_get_name(args.buf)),
+            settings = {
+              intelephense = {
+                files = {
+                  maxSize = 1000000,
+                  associations = { "*.php", "*.phtml" },
+                },
+                environment = {
+                  includePaths = {},
+                },
+              },
+            },
+          }, {
+            bufnr = args.buf,
+            reuse_client = function(client, config)
+              return client.name == config.name and client.config.root_dir == config.root_dir
+            end,
+          })
+        end,
+        desc = "Start Intelephense LSP for PHP files"
+      })
+      
+      vim.api.nvim_create_autocmd("FileType", {
+        pattern = "python",
+        callback = function(args)
+          vim.lsp.start({
+            name = 'pyright',
+            cmd = { 'pyright-langserver', '--stdio' },
+            filetypes = { 'python' },
+            on_attach = on_attach,
+            capabilities = capabilities,
+            root_dir = find_root({
+              'pyproject.toml',
+              'setup.py',
+              'setup.cfg',
+              'requirements.txt',
+              'Pipfile',
+              'pyrightconfig.json',
+              '.git'
+            }, vim.api.nvim_buf_get_name(args.buf)),
+            settings = {
+              python = {
+                analysis = {
+                  autoSearchPaths = true,
+                  useLibraryCodeForTypes = true,
+                  diagnosticMode = "workspace",
+                  typeCheckingMode = "basic",
+                },
+              },
+            },
+          }, {
+            bufnr = args.buf,
+            reuse_client = function(client, config)
+              return client.name == config.name and client.config.root_dir == config.root_dir
+            end,
+          })
+        end,
+        desc = "Start Pyright LSP for Python files"
+      })
       
       -- FIXED: Global diagnostics configuration - ERRORS get full treatment, WARNINGS just get signs
       vim.diagnostic.config({

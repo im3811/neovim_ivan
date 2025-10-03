@@ -148,40 +148,373 @@ return {
           end,
         },
       }
-
-      -- Key mappings
-      local keymap = vim.keymap.set
-
-      -- Debug session controls
-      keymap("n", "<leader>db", dap.toggle_breakpoint, { desc = "Toggle breakpoint" })
-      keymap("n", "<leader>dB", function()
-        dap.set_breakpoint(vim.fn.input("Breakpoint condition: "))
-      end, { desc = "Set conditional breakpoint" })
-
-      keymap("n", "<leader>dc", dap.continue, { desc = "Continue" })
-      keymap("n", "<leader>ds", dap.step_over, { desc = "Step over" })
-      keymap("n", "<leader>di", dap.step_into, { desc = "Step into" })
-      keymap("n", "<leader>do", dap.step_out, { desc = "Step out" })
-
-      -- Debug UI controls
-      keymap("n", "<leader>du", function()
-        require("dapui").toggle()
-      end, { desc = "Toggle debug UI" })
-
-      keymap("n", "<leader>dr", dap.repl.open, { desc = "Open debug REPL" })
-      keymap("n", "<leader>dl", dap.run_last, { desc = "Run last debug session" })
-
-      -- Python-specific
-      keymap("n", "<leader>dpy", dap_python.test_method, { desc = "Debug Python test method" })
-      keymap("n", "<leader>dpc", dap_python.test_class, { desc = "Debug Python test class" })
-
-      -- Terminate session
-      keymap("n", "<leader>dt", dap.terminate, { desc = "Terminate debug session" })
-
-      -- Evaluate expression
-      keymap("v", "<leader>de", function()
-        require("dapui").eval()
-      end, { desc = "Evaluate selection" })
     end,
+  },
+
+  -- PHP Debug Configuration
+  {
+    "mfussenegger/nvim-dap",
+    ft = { "php" },
+    dependencies = {
+      "williamboman/mason.nvim",
+    },
+    config = function()
+      local dap = require("dap")
+      
+      -- PHP adapter configuration
+      dap.adapters.php = {
+        type = "executable",
+        command = "node",
+        -- You need to install vscode-php-debug
+        -- Mason will install it to: ~/.local/share/nvim/mason/packages/php-debug-adapter/extension/out/phpDebug.js
+        args = { vim.fn.stdpath("data") .. "/mason/packages/php-debug-adapter/extension/out/phpDebug.js" }
+      }
+      
+      -- PHP debug configurations
+      dap.configurations.php = {
+        {
+          type = "php",
+          request = "launch",
+          name = "Listen for Xdebug (9003)",
+          port = 9003,  -- Modern Xdebug uses port 9003 by default
+          pathMappings = {
+            -- Adjust these mappings based on your setup
+            -- ["/var/www/html"] = "${workspaceFolder}",
+          },
+          log = false,
+          -- serverSourceRoot = "/var/www/html",  -- Uncomment if using Docker
+          -- localSourceRoot = "${workspaceFolder}",  -- Uncomment if using Docker
+        },
+        {
+          type = "php",
+          request = "launch",
+          name = "Listen for Xdebug (9000)",
+          port = 9000,  -- Legacy Xdebug port
+          pathMappings = {
+            -- ["/var/www/html"] = "${workspaceFolder}",
+          },
+          log = false,
+        },
+        {
+          type = "php",
+          request = "launch",
+          name = "Launch currently open script",
+          program = "${file}",
+          cwd = "${fileDirname}",
+          port = 9003,
+          runtimeArgs = {
+            "-dxdebug.mode=debug",
+            "-dxdebug.start_with_request=yes",
+            "-dxdebug.client_port=9003"
+          },
+          runtimeExecutable = "php",
+        },
+        {
+          type = "php",
+          request = "launch",
+          name = "Launch with built-in server",
+          program = "${file}",
+          cwd = "${fileDirname}",
+          port = 9003,
+          runtimeArgs = {
+            "-dxdebug.mode=debug",
+            "-dxdebug.start_with_request=yes",
+            "-dxdebug.client_port=9003",
+            "-S",
+            "localhost:8000"
+          },
+          runtimeExecutable = "php",
+          serverReadyAction = {
+            pattern = "Development Server \\(http://localhost:([0-9]+)\\) started",
+            uriFormat = "http://localhost:%s",
+            action = "openExternally"
+          },
+        },
+      }
+    end,
+  },
+
+  -- Rust Debug Configuration
+  {
+    "mfussenegger/nvim-dap",
+    ft = { "rust" },
+    config = function()
+      local dap = require("dap")
+      
+      -- Rust adapter using CodeLLDB
+      dap.adapters.codelldb = {
+        type = 'server',
+        port = "${port}",
+        executable = {
+          command = vim.fn.stdpath("data") .. '/mason/bin/codelldb',
+          args = {"--port", "${port}"},
+        }
+      }
+      
+      -- Alternative: Using lldb-vscode (fallback)
+      dap.adapters.lldb = {
+        type = 'executable',
+        command = '/usr/bin/lldb-vscode', -- Adjust path as needed
+        name = 'lldb'
+      }
+      
+      -- Rust configurations
+      dap.configurations.rust = {
+        {
+          name = "Launch",
+          type = "codelldb",
+          request = "launch",
+          program = function()
+            -- First try to find the binary in target/debug
+            local cwd = vim.fn.getcwd()
+            local cargo_toml = vim.fn.findfile("Cargo.toml", cwd .. ";")
+            
+            if cargo_toml ~= "" then
+              -- Parse Cargo.toml to find binary name
+              local project_root = vim.fn.fnamemodify(cargo_toml, ":h")
+              local handle = io.popen("cd " .. project_root .. " && cargo metadata --no-deps --format-version 1 | grep '\"name\"' | head -1")
+              if handle then
+                local result = handle:read("*a")
+                handle:close()
+                local pkg_name = result:match('"name"%s*:%s*"([^"]+)"')
+                if pkg_name then
+                  local binary_path = project_root .. "/target/debug/" .. pkg_name
+                  if vim.fn.filereadable(binary_path) == 1 then
+                    return binary_path
+                  end
+                end
+              end
+            end
+            
+            -- Fallback: ask user for binary path
+            return vim.fn.input('Path to executable: ', vim.fn.getcwd() .. '/target/debug/', 'file')
+          end,
+          cwd = '${workspaceFolder}',
+          stopOnEntry = false,
+          args = function()
+            local args_string = vim.fn.input('Arguments: ')
+            return vim.split(args_string, " ")
+          end,
+          runInTerminal = false,
+          -- Environment variables
+          env = function()
+            local variables = {}
+            for k, v in pairs(vim.fn.environ()) do
+              table.insert(variables, string.format("%s=%s", k, v))
+            end
+            return variables
+          end,
+        },
+        {
+          name = "Launch (from cargo)",
+          type = "codelldb",
+          request = "launch",
+          program = function()
+            os.execute("cargo build")
+            local handle = io.popen("cargo metadata --no-deps --format-version 1 | grep '\"name\"' | head -1")
+            if handle then
+              local result = handle:read("*a")
+              handle:close()
+              local pkg_name = result:match('"name"%s*:%s*"([^"]+)"')
+              if pkg_name then
+                return vim.fn.getcwd() .. "/target/debug/" .. pkg_name
+              end
+            end
+            return vim.fn.input('Path to executable: ', vim.fn.getcwd() .. '/target/debug/', 'file')
+          end,
+          cwd = '${workspaceFolder}',
+          stopOnEntry = false,
+          runInTerminal = false,
+        },
+        {
+          name = "Launch test",
+          type = "codelldb",
+          request = "launch",
+          program = function()
+            -- Build tests first
+            os.execute("cargo test --no-run")
+            -- Find the test binary
+            local handle = io.popen("find target/debug/deps -type f -executable -name '*-*' | head -1")
+            if handle then
+              local result = handle:read("*a"):gsub("\n", "")
+              handle:close()
+              if result ~= "" then
+                return result
+              end
+            end
+            return vim.fn.input('Path to test executable: ', vim.fn.getcwd() .. '/target/debug/deps/', 'file')
+          end,
+          cwd = '${workspaceFolder}',
+          stopOnEntry = false,
+          args = {"--nocapture"},
+        },
+        {
+          name = "Attach to process",
+          type = "codelldb",
+          request = "attach",
+          pid = require('dap.utils').pick_process,
+          args = {},
+        },
+      }
+    end,
+  },
+
+  -- Mason DAP to automatically install debug adapters
+  {
+    "jay-babu/mason-nvim-dap.nvim",
+    dependencies = {
+      "williamboman/mason.nvim",
+      "mfussenegger/nvim-dap",
+    },
+    config = function()
+      require("mason-nvim-dap").setup({
+        ensure_installed = { 
+          "python",           -- Python debugger (debugpy)
+          "php",              -- PHP debugger (vscode-php-debug)
+          "codelldb",         -- Rust/C/C++ debugger
+        },
+        automatic_installation = true,
+        handlers = {
+          function(config)
+            require("mason-nvim-dap").default_setup(config)
+          end,
+          -- PHP needs special handling for the path
+          php = function(config)
+            config.adapters = {
+              type = "executable",
+              command = "node",
+              args = { vim.fn.stdpath("data") .. "/mason/packages/php-debug-adapter/extension/out/phpDebug.js" }
+            }
+            require("mason-nvim-dap").default_setup(config)
+          end,
+          -- Rust/CodeLLDB handling
+          codelldb = function(config)
+            config.adapters = {
+              type = 'server',
+              port = "${port}",
+              executable = {
+                command = vim.fn.stdpath("data") .. '/mason/bin/codelldb',
+                args = {"--port", "${port}"},
+              }
+            }
+            require("mason-nvim-dap").default_setup(config)
+          end,
+        },
+      })
+    end,
+  },
+
+  -- Global keymappings for debugging (works for all languages)
+  {
+    "mfussenegger/nvim-dap",
+    keys = {
+      {
+        "<leader>db",
+        function() require("dap").toggle_breakpoint() end,
+        desc = "Toggle breakpoint"
+      },
+      {
+        "<leader>dB",
+        function()
+          require("dap").set_breakpoint(vim.fn.input("Breakpoint condition: "))
+        end,
+        desc = "Set conditional breakpoint"
+      },
+      {
+        "<leader>dc",
+        function() require("dap").continue() end,
+        desc = "Continue/Start debugging"
+      },
+      {
+        "<leader>ds",
+        function() require("dap").step_over() end,
+        desc = "Step over"
+      },
+      {
+        "<leader>di",
+        function() require("dap").step_into() end,
+        desc = "Step into"
+      },
+      {
+        "<leader>do",
+        function() require("dap").step_out() end,
+        desc = "Step out"
+      },
+      {
+        "<leader>du",
+        function() require("dapui").toggle() end,
+        desc = "Toggle debug UI"
+      },
+      {
+        "<leader>dr",
+        function() require("dap").repl.open() end,
+        desc = "Open debug REPL"
+      },
+      {
+        "<leader>dl",
+        function() require("dap").run_last() end,
+        desc = "Run last debug session"
+      },
+      {
+        "<leader>dt",
+        function() require("dap").terminate() end,
+        desc = "Terminate debug session"
+      },
+      {
+        "<leader>de",
+        function() require("dapui").eval() end,
+        desc = "Evaluate selection",
+        mode = "v"
+      },
+      -- Python-specific
+      {
+        "<leader>dpy",
+        function() require("dap-python").test_method() end,
+        desc = "Debug Python test method",
+        ft = "python"
+      },
+      {
+        "<leader>dpc",
+        function() require("dap-python").test_class() end,
+        desc = "Debug Python test class",
+        ft = "python"
+      },
+      -- PHP-specific helper to start debugging
+      {
+        "<leader>dph",
+        function()
+          -- Prompt for Xdebug session
+          vim.notify("Starting PHP Debug Session - Make sure Xdebug is configured!", vim.log.levels.INFO)
+          require("dap").continue()
+        end,
+        desc = "Start PHP debugging session",
+        ft = "php"
+      },
+      -- Rust-specific debugging commands
+      {
+        "<leader>drs",
+        function()
+          -- Build and debug current Rust project
+          vim.notify("Building Rust project...", vim.log.levels.INFO)
+          vim.fn.system("cargo build")
+          vim.notify("Starting Rust debugger", vim.log.levels.INFO)
+          require("dap").continue()
+        end,
+        desc = "Build and debug Rust project",
+        ft = "rust"
+      },
+      {
+        "<leader>drt",
+        function()
+          -- Debug Rust tests
+          vim.notify("Building tests...", vim.log.levels.INFO)
+          vim.fn.system("cargo test --no-run")
+          vim.notify("Starting test debugger", vim.log.levels.INFO)
+          require("dap").continue()
+        end,
+        desc = "Debug Rust tests",
+        ft = "rust"
+      },
+    },
   },
 }
