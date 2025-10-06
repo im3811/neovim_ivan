@@ -190,6 +190,40 @@ vim.keymap.set("n", "<leader>r", function()
     vim.cmd("vertical resize 80")
     vim.cmd("setlocal bufhidden=wipe")  -- Auto-delete buffer when window closes
     
+  elseif filetype == "java" then
+    -- Java compilation and execution
+    local class_name = vim.fn.expand("%:t:r")  -- Get class name without extension
+    local package_path = ""
+    
+    -- Try to detect package structure
+    local first_line = vim.fn.getline(1)
+    local package_match = string.match(first_line, "^package%s+([%w%.]+);")
+    
+    if package_match then
+      -- We're in a package, need to compile from source root
+      package_path = string.gsub(package_match, "%.", "/") .. "/"
+      
+      -- Find the source root (go up until we don't see the package folders)
+      local source_root = filepath
+      for _ = 1, 10 do
+        source_root = vim.fn.fnamemodify(source_root, ":h")
+        if not string.find(source_root, package_path:gsub("/", "")) then
+          break
+        end
+      end
+      
+      -- Compile and run from source root
+      vim.cmd("rightbelow vsplit | terminal cd " .. vim.fn.shellescape(source_root) .. 
+              " && javac " .. package_path .. class_name .. ".java" ..
+              " && java " .. package_match .. "." .. class_name)
+    else
+      -- No package, simple compilation
+      vim.cmd("rightbelow vsplit | terminal javac " .. filename .. " && java " .. class_name)
+    end
+    
+    vim.cmd("vertical resize 80")
+    vim.cmd("setlocal bufhidden=wipe")  -- Auto-delete buffer when window closes
+    
   elseif filetype == "rust" then
     -- Check if we're in a Cargo project
     local cargo_toml = vim.fn.findfile("Cargo.toml", ".;")
@@ -288,6 +322,48 @@ vim.api.nvim_create_autocmd("BufEnter", {
             vim.notify("Restarted rust-analyzer for binary: " .. vim.fn.fnamemodify(current_file, ":t"), vim.log.levels.INFO)
           end, 1500) -- Give it time to settle after cd
         end
+      end
+    end
+  end,
+})
+
+-- Auto change directory to project root for Java files
+vim.api.nvim_create_autocmd("BufEnter", {
+  pattern = "*.java",
+  callback = function()
+    local current_file = vim.fn.expand("%:p")
+    if current_file == "" or vim.fn.filereadable(current_file) == 0 then
+      return
+    end
+    
+    -- Find Java project root (pom.xml, build.gradle, etc.)
+    local function find_java_root(path)
+      local dir = vim.fn.fnamemodify(path, ':h')
+      local markers = { "pom.xml", "build.gradle", "build.gradle.kts", ".project", ".classpath" }
+      
+      while dir ~= '/' and dir ~= '.' do
+        for _, marker in ipairs(markers) do
+          if vim.fn.filereadable(dir .. '/' .. marker) == 1 then
+            return dir
+          end
+        end
+        -- Also check for src directory structure
+        if vim.fn.isdirectory(dir .. '/src/main/java') == 1 then
+          return dir
+        end
+        dir = vim.fn.fnamemodify(dir, ':h')
+      end
+      return nil
+    end
+    
+    local project_root = find_java_root(current_file)
+    if project_root then
+      local current_cwd = vim.fn.getcwd()
+      
+      -- Change directory if needed
+      if current_cwd ~= project_root then
+        vim.cmd('cd ' .. project_root)
+        vim.notify("Changed to Java project root: " .. project_root, vim.log.levels.INFO)
       end
     end
   end,

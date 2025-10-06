@@ -16,6 +16,7 @@ return {
         ensure_installed = {
           "intelephense", -- PHP LSP
           "pyright",      -- Python LSP
+          "jdtls",        -- Java LSP
           -- rust_analyzer removed - handled by rustaceanvim
         },
         automatic_installation = true,
@@ -136,8 +137,8 @@ return {
         },
       })
       
-      -- Rust LSP is now handled by rustaceanvim plugin
-      -- No manual rust_analyzer configuration needed
+      -- Java LSP is handled by nvim-jdtls plugin (in java.lua)
+      -- Rust LSP is handled by rustaceanvim plugin
       
       -- Enable the configured LSP servers
       vim.lsp.enable('intelephense')
@@ -213,6 +214,8 @@ return {
         end,
         desc = "Start Pyright LSP for Python files"
       })
+      
+      -- NOTE: Java LSP is handled by nvim-jdtls in java.lua, not here
       
       -- FIXED: Global diagnostics configuration - ERRORS get full treatment, WARNINGS just get signs
       vim.diagnostic.config({

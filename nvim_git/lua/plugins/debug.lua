@@ -372,6 +372,8 @@ return {
           "python",           -- Python debugger (debugpy)
           "php",              -- PHP debugger (vscode-php-debug)
           "codelldb",         -- Rust/C/C++ debugger
+          "java-debug-adapter", -- Java debugger
+          "java-test",        -- Java test runner
         },
         automatic_installation = true,
         handlers = {
@@ -514,6 +516,46 @@ return {
         end,
         desc = "Debug Rust tests",
         ft = "rust"
+      },
+      -- Java-specific debugging commands
+      {
+        "<leader>djr",
+        function()
+          -- Run Java file
+          local file = vim.fn.expand("%")
+          local class_name = vim.fn.expand("%:t:r")
+          vim.notify("Compiling and debugging Java...", vim.log.levels.INFO)
+          vim.fn.system("javac " .. file)
+          require("dap").continue()
+        end,
+        desc = "Debug Java file",
+        ft = "java"
+      },
+      {
+        "<leader>djt",
+        function()
+          -- Debug Java test
+          if vim.fn.exists(":JdtTestClass") > 0 then
+            vim.cmd("JdtTestClass")
+          else
+            vim.notify("Java test debugging requires active JDTLS", vim.log.levels.WARN)
+          end
+        end,
+        desc = "Debug Java test class",
+        ft = "java"
+      },
+      {
+        "<leader>djm",
+        function()
+          -- Debug Java test method
+          if vim.fn.exists(":JdtTestMethod") > 0 then
+            vim.cmd("JdtTestMethod")
+          else
+            vim.notify("Java test debugging requires active JDTLS", vim.log.levels.WARN)
+          end
+        end,
+        desc = "Debug Java test method",
+        ft = "java"
       },
     },
   },
