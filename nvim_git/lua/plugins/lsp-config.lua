@@ -17,6 +17,7 @@ return {
           "intelephense", -- PHP LSP
           "pyright",      -- Python LSP
           "jdtls",        -- Java LSP
+          "omnisharp",    -- C# LSP
           -- rust_analyzer removed - handled by rustaceanvim
         },
         automatic_installation = true,
@@ -137,12 +138,40 @@ return {
         },
       })
       
+      -- Configure C# LSP (OmniSharp) - FIXED WITH DIRECT PATH AND -lsp FLAG
+      vim.lsp.config('omnisharp', {
+        cmd = { vim.fn.stdpath("data") .. '/mason/packages/omnisharp/OmniSharp', '-lsp' },
+        filetypes = { 'cs' },
+        on_attach = on_attach,
+        capabilities = capabilities,
+        root_dir = function(fname)
+          return find_root({
+            '*.sln',
+            '*.csproj',
+            'omnisharp.json',
+            'function.json',
+            '.git'
+          }, fname)
+        end,
+        settings = {
+          FormattingOptions = {
+            EnableEditorConfigSupport = true,
+            OrganizeImports = true,
+          },
+          RoslynExtensionsOptions = {
+            EnableAnalyzersSupport = true,
+            EnableImportCompletion = true,
+          },
+        },
+      })
+      
       -- Java LSP is handled by nvim-jdtls plugin (in java.lua)
       -- Rust LSP is handled by rustaceanvim plugin
       
       -- Enable the configured LSP servers
       vim.lsp.enable('intelephense')
       vim.lsp.enable('pyright')
+      vim.lsp.enable('omnisharp')
       
       -- CRITICAL FIX: Auto-start LSP servers when opening files
       -- This is what was missing - the new API requires explicit autocommands
@@ -213,6 +242,48 @@ return {
           })
         end,
         desc = "Start Pyright LSP for Python files"
+      })
+      
+      vim.api.nvim_create_autocmd("FileType", {
+        pattern = "cs",
+        callback = function(args)
+          local fname = vim.api.nvim_buf_get_name(args.buf)
+          local root = find_root({
+            '*.sln',
+            '*.csproj',
+            'omnisharp.json',
+            'function.json',
+            '.git'
+          }, fname)
+          
+          -- Debug: print what root was found
+          vim.notify("Starting OmniSharp with root_dir: " .. root, vim.log.levels.INFO)
+          
+          vim.lsp.start({
+            name = 'omnisharp',
+            cmd = { vim.fn.stdpath("data") .. '/mason/packages/omnisharp/OmniSharp', '-lsp' },
+            filetypes = { 'cs' },
+            on_attach = on_attach,
+            capabilities = capabilities,
+            root_dir = root,
+            settings = {
+              FormattingOptions = {
+                EnableEditorConfigSupport = true,
+                OrganizeImports = true,
+              },
+              RoslynExtensionsOptions = {
+                EnableAnalyzersSupport = true,
+                EnableImportCompletion = true,
+              },
+            },
+          }, {
+            bufnr = args.buf,
+            reuse_client = function(client, config)
+              return client.name == config.name and client.config.root_dir == config.root_dir
+            end,
+          })
+        end,
+        desc = "Start OmniSharp LSP for C# files"
       })
       
       -- NOTE: Java LSP is handled by nvim-jdtls in java.lua, not here

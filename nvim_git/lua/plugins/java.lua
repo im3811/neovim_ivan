@@ -101,9 +101,10 @@ return {
             references = {
               includeDecompiledSources = true,
             },
+            -- DISABLE inlay hints to prevent errors
             inlayHints = {
               parameterNames = {
-                enabled = "all",
+                enabled = "none",  -- Changed from "all" to "none"
               },
             },
             format = {
@@ -227,10 +228,8 @@ return {
           jdtls.setup_dap({ hotcodereplace = "auto" })
           require("jdtls.dap").setup_dap_main_class_configs()
           
-          -- Enable inlay hints if supported
-          if vim.lsp.inlay_hint then
-            vim.lsp.inlay_hint.enable(true, { bufnr = bufnr })
-          end
+          -- DO NOT enable inlay hints - they cause errors
+          -- Inlay hints disabled to prevent "col out of range" errors
         end,
       }
       
