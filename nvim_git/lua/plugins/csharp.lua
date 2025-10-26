@@ -33,10 +33,21 @@ return {
           name = "launch - netcoredbg",
           request = "launch",
           program = function()
-            -- Find the DLL in bin/Debug
+            -- Automatically find the DLL in bin/Debug
             local cwd = vim.fn.getcwd()
-            local dll_path = vim.fn.input('Path to dll: ', cwd .. '/bin/Debug/', 'file')
-            return dll_path
+            -- Try to find .csproj file
+            local csproj = vim.fn.glob(cwd .. "/*.csproj")
+            if csproj ~= "" then
+              -- Extract project name from .csproj filename
+              local project_name = vim.fn.fnamemodify(csproj, ":t:r")
+              -- Look for the DLL in common locations
+              local dll_path = cwd .. "/bin/Debug/net8.0/" .. project_name .. ".dll"
+              if vim.fn.filereadable(dll_path) == 1 then
+                return dll_path
+              end
+            end
+            -- Fallback: ask user
+            return vim.fn.input('Path to dll: ', cwd .. '/bin/Debug/', 'file')
           end,
         },
         {
@@ -56,6 +67,7 @@ return {
       {
         "<leader>dcs",
         function()
+          -- Build before debugging
           vim.notify("Building C# project...", vim.log.levels.INFO)
           vim.fn.system("dotnet build")
           vim.notify("Starting C# debugger", vim.log.levels.INFO)
