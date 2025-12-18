@@ -18,6 +18,7 @@ return {
           "pyright",      -- Python LSP
           "jdtls",        -- Java LSP
           "omnisharp",    -- C# LSP
+          "clangd",       -- C/C++ LSP
           -- rust_analyzer removed - handled by rustaceanvim
         },
         automatic_installation = true,
@@ -138,6 +139,38 @@ return {
         },
       })
       
+      -- Configure C/C++ LSP (clangd)
+      vim.lsp.config('clangd', {
+        cmd = { 'clangd', '--background-index', '--clang-tidy' },
+        filetypes = { 'c', 'cpp', 'objc', 'objcpp', 'cuda', 'proto' },
+        on_attach = on_attach,
+        capabilities = capabilities,
+        root_dir = function(fname)
+          return find_root({
+            'compile_commands.json',
+            'compile_flags.txt',
+            '.clangd',
+            '.clang-tidy',
+            '.clang-format',
+            'configure.ac',
+            '.git',
+            'Makefile',
+            'CMakeLists.txt'
+          }, fname)
+        end,
+        settings = {
+          clangd = {
+            InlayHints = {
+              Designators = true,
+              Enabled = true,
+              ParameterNames = true,
+              DeducedTypes = true,
+            },
+            fallbackFlags = { "-std=c++17" },
+          },
+        },
+      })
+      
       -- Configure C# LSP (OmniSharp) - FIXED WITH DIRECT PATH AND -lsp FLAG
       vim.lsp.config('omnisharp', {
         cmd = { vim.fn.stdpath("data") .. '/mason/packages/omnisharp/OmniSharp', '-lsp' },
@@ -171,6 +204,7 @@ return {
       -- Enable the configured LSP servers
       vim.lsp.enable('intelephense')
       vim.lsp.enable('pyright')
+      vim.lsp.enable('clangd')
       vim.lsp.enable('omnisharp')
       
       -- CRITICAL FIX: Auto-start LSP servers when opening files
@@ -242,6 +276,47 @@ return {
           })
         end,
         desc = "Start Pyright LSP for Python files"
+      })
+      
+      vim.api.nvim_create_autocmd("FileType", {
+        pattern = { "c", "cpp" },
+        callback = function(args)
+          vim.lsp.start({
+            name = 'clangd',
+            cmd = { 'clangd', '--background-index', '--clang-tidy' },
+            filetypes = { 'c', 'cpp', 'objc', 'objcpp', 'cuda', 'proto' },
+            on_attach = on_attach,
+            capabilities = capabilities,
+            root_dir = find_root({
+              'compile_commands.json',
+              'compile_flags.txt',
+              '.clangd',
+              '.clang-tidy',
+              '.clang-format',
+              'configure.ac',
+              '.git',
+              'Makefile',
+              'CMakeLists.txt'
+            }, vim.api.nvim_buf_get_name(args.buf)),
+            settings = {
+              clangd = {
+                InlayHints = {
+                  Designators = true,
+                  Enabled = true,
+                  ParameterNames = true,
+                  DeducedTypes = true,
+                },
+                fallbackFlags = { "-std=c++17" },
+              },
+            },
+          }, {
+            bufnr = args.buf,
+            reuse_client = function(client, config)
+              return client.name == config.name and client.config.root_dir == config.root_dir
+            end,
+          })
+        end,
+        desc = "Start clangd LSP for C/C++ files"
       })
       
       vim.api.nvim_create_autocmd("FileType", {

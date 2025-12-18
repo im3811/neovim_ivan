@@ -172,38 +172,56 @@ vim.keymap.set('n', '<leader>tm', function()
   end
 end, { desc = "Toggle mouse in current window" })
 
--- Run current file (with vertical terminal split)
+-- ===== SMART RUN CURRENT FILE (WITH SPRING BOOT DETECTION) =====
 vim.keymap.set("n", "<leader>r", function()
   local filetype = vim.bo.filetype
   local filename = vim.fn.expand("%")
   local filepath = vim.fn.expand("%:p")
-
+  
+  -- FIRST: Check if we're in a Spring Boot/Maven project
+  local pom_xml = vim.fn.findfile("pom.xml", ".;")
+  local build_gradle = vim.fn.findfile("build.gradle", ".;")
+  
+  if filetype == "java" and (pom_xml ~= "" or build_gradle ~= "") then
+    -- We're in a Maven/Gradle project - run Spring Boot!
+    vim.notify("Detected Spring Boot project - running with Maven/Gradle", vim.log.levels.INFO)
+    
+    if pom_xml ~= "" then
+      -- Maven project
+      local project_root = vim.fn.fnamemodify(pom_xml, ":h")
+      vim.cmd("rightbelow vsplit | terminal cd " .. vim.fn.shellescape(project_root) .. " && ./mvnw spring-boot:run")
+    elseif build_gradle ~= "" then
+      -- Gradle project
+      local project_root = vim.fn.fnamemodify(build_gradle, ":h")
+      vim.cmd("rightbelow vsplit | terminal cd " .. vim.fn.shellescape(project_root) .. " && ./gradlew bootRun")
+    end
+    
+    vim.cmd("vertical resize 80")
+    vim.cmd("setlocal bufhidden=wipe")
+    return  -- Exit early - we handled it!
+  end
+  
+  -- FALLBACK: Original behavior for other file types
   if filetype == "php" then
-    -- Use vertical terminal split
     vim.cmd("rightbelow vsplit | terminal php " .. filename)
     vim.cmd("vertical resize 80")
-    vim.cmd("setlocal bufhidden=wipe")  -- Auto-delete buffer when window closes
+    vim.cmd("setlocal bufhidden=wipe")
     
   elseif filetype == "python" then
-    -- Use vertical terminal split
     vim.cmd("rightbelow vsplit | terminal python " .. filename)
     vim.cmd("vertical resize 80")
-    vim.cmd("setlocal bufhidden=wipe")  -- Auto-delete buffer when window closes
+    vim.cmd("setlocal bufhidden=wipe")
     
   elseif filetype == "java" then
-    -- Java compilation and execution
-    local class_name = vim.fn.expand("%:t:r")  -- Get class name without extension
+    -- Single file Java (no Maven/Gradle)
+    local class_name = vim.fn.expand("%:t:r")
     local package_path = ""
     
-    -- Try to detect package structure
     local first_line = vim.fn.getline(1)
     local package_match = string.match(first_line, "^package%s+([%w%.]+);")
     
     if package_match then
-      -- We're in a package, need to compile from source root
       package_path = string.gsub(package_match, "%.", "/") .. "/"
-      
-      -- Find the source root (go up until we don't see the package folders)
       local source_root = filepath
       for _ = 1, 10 do
         source_root = vim.fn.fnamemodify(source_root, ":h")
@@ -212,30 +230,22 @@ vim.keymap.set("n", "<leader>r", function()
         end
       end
       
-      -- Compile and run from source root
       vim.cmd("rightbelow vsplit | terminal cd " .. vim.fn.shellescape(source_root) .. 
               " && javac " .. package_path .. class_name .. ".java" ..
               " && java " .. package_match .. "." .. class_name)
     else
-      -- No package, simple compilation
       vim.cmd("rightbelow vsplit | terminal javac " .. filename .. " && java " .. class_name)
     end
     
     vim.cmd("vertical resize 80")
-    vim.cmd("setlocal bufhidden=wipe")  -- Auto-delete buffer when window closes
+    vim.cmd("setlocal bufhidden=wipe")
     
   elseif filetype == "rust" then
-    -- Check if we're in a Cargo project
     local cargo_toml = vim.fn.findfile("Cargo.toml", ".;")
     
     if cargo_toml ~= "" then
-      -- We're in a Cargo project
       local project_root = vim.fn.fnamemodify(cargo_toml, ":h")
-      
-      -- Extract just the filename without path for binary name
       local bin_name = vim.fn.fnamemodify(filename, ":t:r")
-      
-      -- Check if this is a configured binary (check Cargo.toml)
       local cargo_content = vim.fn.readfile(cargo_toml)
       local has_bin_config = false
       
@@ -247,39 +257,68 @@ vim.keymap.set("n", "<leader>r", function()
       end
       
       if has_bin_config then
-        -- It's a configured binary, use cargo run
         vim.cmd("rightbelow vsplit | terminal cd " .. vim.fn.shellescape(project_root) .. " && cargo run --bin " .. bin_name)
       elseif string.find(filename, "^main%.rs$") or string.find(filepath, "/src/main%.rs$") then
-        -- It's main.rs, run the default binary
         vim.cmd("rightbelow vsplit | terminal cd " .. vim.fn.shellescape(project_root) .. " && cargo run")
       else
-        -- It's some other .rs file in the project, compile and run standalone
         local simple_exe_name = bin_name
         vim.cmd("rightbelow vsplit | terminal cd " .. vim.fn.shellescape(project_root) .. " && rustc " .. vim.fn.shellescape(filepath) .. " -o /tmp/" .. simple_exe_name .. " && /tmp/" .. simple_exe_name)
       end
     else
-      -- Not in a Cargo project, compile and run single file
       local simple_exe_name = vim.fn.fnamemodify(filename, ":t:r")
       vim.cmd("rightbelow vsplit | terminal rustc " .. vim.fn.shellescape(filepath) .. " -o /tmp/" .. simple_exe_name .. " && /tmp/" .. simple_exe_name)
     end
     
     vim.cmd("vertical resize 80")
-    vim.cmd("setlocal bufhidden=wipe")  -- Auto-delete buffer when window closes
+    vim.cmd("setlocal bufhidden=wipe")
   else
     print("No run command configured for filetype: " .. filetype)
   end
-end, { desc = "Run current file" })
+end, { desc = "Smart run: Spring Boot (if Maven/Gradle) or single file" })
+
+-- Spring Boot specific runner (explicit Maven/Gradle)
+vim.keymap.set("n", "<leader>rs", function()
+  local pom_xml = vim.fn.findfile("pom.xml", ".;")
+  local build_gradle = vim.fn.findfile("build.gradle", ".;")
+  
+  if pom_xml ~= "" then
+    -- Maven project
+    local project_root = vim.fn.fnamemodify(pom_xml, ":h")
+    vim.cmd("rightbelow vsplit | terminal cd " .. vim.fn.shellescape(project_root) .. " && ./mvnw spring-boot:run")
+    vim.cmd("vertical resize 80")
+    vim.cmd("setlocal bufhidden=wipe")
+  elseif build_gradle ~= "" then
+    -- Gradle project
+    local project_root = vim.fn.fnamemodify(build_gradle, ":h")
+    vim.cmd("rightbelow vsplit | terminal cd " .. vim.fn.shellescape(project_root) .. " && ./gradlew bootRun")
+    vim.cmd("vertical resize 80")
+    vim.cmd("setlocal bufhidden=wipe")
+  else
+    vim.notify("No Maven or Gradle project found", vim.log.levels.ERROR)
+  end
+end, { desc = "Run Spring Boot application (Maven/Gradle)" })
+
+-- Maven test runner
+vim.keymap.set("n", "<leader>rt", function()
+  local pom_xml = vim.fn.findfile("pom.xml", ".;")
+  if pom_xml ~= "" then
+    local project_root = vim.fn.fnamemodify(pom_xml, ":h")
+    vim.cmd("rightbelow vsplit | terminal cd " .. vim.fn.shellescape(project_root) .. " && ./mvnw test")
+    vim.cmd("vertical resize 80")
+    vim.cmd("setlocal bufhidden=wipe")
+  else
+    vim.notify("No Maven project found", vim.log.levels.ERROR)
+  end
+end, { desc = "Run Maven tests" })
 
 -- Add this to exit terminal mode with Esc
 vim.keymap.set("t", "<Esc>", [[<C-\><C-n>]], { desc = "Exit terminal mode" })
 
 -- Press Enter in terminal normal mode to close the terminal
 vim.keymap.set("n", "<CR>", function()
-  -- Only close if we're in a terminal buffer
   if vim.bo.buftype == "terminal" then
     vim.cmd("close")
   else
-    -- Otherwise, do the normal Enter behavior
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, false, true), "n", false)
   end
 end, { desc = "Close terminal with Enter (in terminal buffers)" })
@@ -293,7 +332,6 @@ vim.api.nvim_create_autocmd("BufEnter", {
       return
     end
     
-    -- Find Cargo.toml by going up directories
     local function find_cargo_root(path)
       local dir = vim.fn.fnamemodify(path, ':h')
       while dir ~= '/' and dir ~= '.' do
@@ -309,18 +347,16 @@ vim.api.nvim_create_autocmd("BufEnter", {
     if project_root then
       local current_cwd = vim.fn.getcwd()
       
-      -- Change directory if needed
       if current_cwd ~= project_root then
         vim.cmd('cd ' .. project_root)
         vim.notify("Changed to project root: " .. project_root, vim.log.levels.INFO)
         
-        -- For binary files, force rust-analyzer restart after directory change
         local is_binary_file = string.find(current_file, "/bin/") ~= nil
         if is_binary_file then
           vim.defer_fn(function()
             vim.cmd("LspRestart rust_analyzer")
             vim.notify("Restarted rust-analyzer for binary: " .. vim.fn.fnamemodify(current_file, ":t"), vim.log.levels.INFO)
-          end, 1500) -- Give it time to settle after cd
+          end, 1500)
         end
       end
     end
@@ -336,7 +372,6 @@ vim.api.nvim_create_autocmd("BufEnter", {
       return
     end
     
-    -- Find Java project root (pom.xml, build.gradle, etc.)
     local function find_java_root(path)
       local dir = vim.fn.fnamemodify(path, ':h')
       local markers = { "pom.xml", "build.gradle", "build.gradle.kts", ".project", ".classpath" }
@@ -347,7 +382,6 @@ vim.api.nvim_create_autocmd("BufEnter", {
             return dir
           end
         end
-        -- Also check for src directory structure
         if vim.fn.isdirectory(dir .. '/src/main/java') == 1 then
           return dir
         end
@@ -360,7 +394,6 @@ vim.api.nvim_create_autocmd("BufEnter", {
     if project_root then
       local current_cwd = vim.fn.getcwd()
       
-      -- Change directory if needed
       if current_cwd ~= project_root then
         vim.cmd('cd ' .. project_root)
         vim.notify("Changed to Java project root: " .. project_root, vim.log.levels.INFO)
