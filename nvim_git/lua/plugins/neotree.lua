@@ -11,9 +11,6 @@ return {
       close_if_last_window = true,
       window = {
         width = 30,
-        mappings = {
-          ["<space>"] = "none", -- Disable space in neo-tree
-        },
       },
       filesystem = {
         follow_current_file = {
@@ -26,8 +23,16 @@ return {
       },
     })
     
-    -- Keybindings
-    vim.keymap.set('n', '<leader>e', ':Neotree toggle<CR>', { desc = 'Toggle file explorer' })
-    vim.keymap.set('n', '<leader>o', ':Neotree focus<CR>', { desc = 'Focus file explorer' })
+    -- Keybindings - CHANGED TO <leader>n
+    vim.keymap.set('n', '<leader>n', ':Neotree toggle<CR>', { 
+      desc = 'Toggle file explorer',
+      noremap = true,
+      silent = true 
+    })
+    vim.keymap.set('n', '<leader>o', ':Neotree focus<CR>', { 
+      desc = 'Focus file explorer',
+      noremap = true,
+      silent = true 
+    })
   end,
 }

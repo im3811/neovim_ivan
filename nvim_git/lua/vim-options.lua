@@ -19,8 +19,6 @@ vim.keymap.set("n", "<leader>w", ":w<CR>")
 vim.keymap.set("n", "<leader>q", ":q<CR>")
 vim.keymap.set("n", "<leader>wq", ":wq<CR>")
 
--- Window navigation will be set up later with touchpad control integration
-
 -- Window management shortcuts
 vim.keymap.set("n", "<leader>sv", "<C-w>v", { desc = "Split window vertically" })
 vim.keymap.set("n", "<leader>sh", "<C-w>s", { desc = "Split window horizontally" })
@@ -172,6 +170,331 @@ vim.keymap.set('n', '<leader>tm', function()
   end
 end, { desc = "Toggle mouse in current window" })
 
+-- ===== JAVA FILE TEMPLATES WITH AUTO-PACKAGING =====
+-- Function to extract package name from file path
+local function get_package_name(filepath)
+  -- Look for src/main/java or src/test/java in the path
+  local java_path_pattern = "src/main/java/(.+)/"
+  local test_path_pattern = "src/test/java/(.+)/"
+  
+  -- Try main java path first
+  local package_path = filepath:match(java_path_pattern)
+  if not package_path then
+    -- Try test java path
+    package_path = filepath:match(test_path_pattern)
+  end
+  
+  if package_path then
+    -- Convert file path to package name (replace / with .)
+    return package_path:gsub("/", ".")
+  end
+  
+  return nil
+end
+
+-- Function to generate Java file template
+local function generate_java_template(file_type, class_name, package_name)
+  local templates = {
+    class = function(name, pkg)
+      local lines = {}
+      if pkg then
+        table.insert(lines, "package " .. pkg .. ";")
+        table.insert(lines, "")
+      end
+      table.insert(lines, "public class " .. name .. " {")
+      table.insert(lines, "    ")
+      table.insert(lines, "}")
+      return lines
+    end,
+    
+    interface = function(name, pkg)
+      local lines = {}
+      if pkg then
+        table.insert(lines, "package " .. pkg .. ";")
+        table.insert(lines, "")
+      end
+      table.insert(lines, "public interface " .. name .. " {")
+      table.insert(lines, "    ")
+      table.insert(lines, "}")
+      return lines
+    end,
+    
+    abstract_class = function(name, pkg)
+      local lines = {}
+      if pkg then
+        table.insert(lines, "package " .. pkg .. ";")
+        table.insert(lines, "")
+      end
+      table.insert(lines, "public abstract class " .. name .. " {")
+      table.insert(lines, "    ")
+      table.insert(lines, "}")
+      return lines
+    end,
+    
+    enum = function(name, pkg)
+      local lines = {}
+      if pkg then
+        table.insert(lines, "package " .. pkg .. ";")
+        table.insert(lines, "")
+      end
+      table.insert(lines, "public enum " .. name .. " {")
+      table.insert(lines, "    ")
+      table.insert(lines, "}")
+      return lines
+    end,
+    
+    record = function(name, pkg)
+      local lines = {}
+      if pkg then
+        table.insert(lines, "package " .. pkg .. ";")
+        table.insert(lines, "")
+      end
+      table.insert(lines, "public record " .. name .. "() {")
+      table.insert(lines, "    ")
+      table.insert(lines, "}")
+      return lines
+    end,
+    
+    service = function(name, pkg)
+      local lines = {}
+      if pkg then
+        table.insert(lines, "package " .. pkg .. ";")
+        table.insert(lines, "")
+      end
+      table.insert(lines, "import org.springframework.stereotype.Service;")
+      table.insert(lines, "")
+      table.insert(lines, "@Service")
+      table.insert(lines, "public class " .. name .. " {")
+      table.insert(lines, "    ")
+      table.insert(lines, "}")
+      return lines
+    end,
+    
+    controller = function(name, pkg)
+      local lines = {}
+      if pkg then
+        table.insert(lines, "package " .. pkg .. ";")
+        table.insert(lines, "")
+      end
+      table.insert(lines, "import org.springframework.web.bind.annotation.RestController;")
+      table.insert(lines, "import org.springframework.web.bind.annotation.RequestMapping;")
+      table.insert(lines, "")
+      table.insert(lines, "@RestController")
+      table.insert(lines, "@RequestMapping")
+      table.insert(lines, "public class " .. name .. " {")
+      table.insert(lines, "    ")
+      table.insert(lines, "}")
+      return lines
+    end,
+    
+    repository = function(name, pkg)
+      local lines = {}
+      if pkg then
+        table.insert(lines, "package " .. pkg .. ";")
+        table.insert(lines, "")
+      end
+      table.insert(lines, "import org.springframework.data.jpa.repository.JpaRepository;")
+      table.insert(lines, "import org.springframework.stereotype.Repository;")
+      table.insert(lines, "")
+      table.insert(lines, "@Repository")
+      table.insert(lines, "public interface " .. name .. " extends JpaRepository<Entity, Long> {")
+      table.insert(lines, "    ")
+      table.insert(lines, "}")
+      return lines
+    end,
+    
+    component = function(name, pkg)
+      local lines = {}
+      if pkg then
+        table.insert(lines, "package " .. pkg .. ";")
+        table.insert(lines, "")
+      end
+      table.insert(lines, "import org.springframework.stereotype.Component;")
+      table.insert(lines, "")
+      table.insert(lines, "@Component")
+      table.insert(lines, "public class " .. name .. " {")
+      table.insert(lines, "    ")
+      table.insert(lines, "}")
+      return lines
+    end,
+    
+    entity = function(name, pkg)
+      local lines = {}
+      if pkg then
+        table.insert(lines, "package " .. pkg .. ";")
+        table.insert(lines, "")
+      end
+      table.insert(lines, "import jakarta.persistence.Entity;")
+      table.insert(lines, "import jakarta.persistence.Id;")
+      table.insert(lines, "import jakarta.persistence.GeneratedValue;")
+      table.insert(lines, "import jakarta.persistence.GenerationType;")
+      table.insert(lines, "")
+      table.insert(lines, "@Entity")
+      table.insert(lines, "public class " .. name .. " {")
+      table.insert(lines, "    ")
+      table.insert(lines, "    @Id")
+      table.insert(lines, "    @GeneratedValue(strategy = GenerationType.IDENTITY)")
+      table.insert(lines, "    private Long id;")
+      table.insert(lines, "    ")
+      table.insert(lines, "}")
+      return lines
+    end,
+  }
+  
+  local generator = templates[file_type]
+  if generator then
+    return generator(class_name, package_name)
+  end
+  
+  return nil
+end
+
+-- Track which files we've already templated
+local templated_files = {}
+
+-- Auto-generate Java file templates when opening EMPTY .java files
+vim.api.nvim_create_autocmd({"BufReadPost", "BufNewFile"}, {
+  pattern = "*.java",
+  callback = function()
+    -- Get buffer info
+    local bufnr = vim.api.nvim_get_current_buf()
+    local filepath = vim.fn.expand("%:p")
+    
+    -- Skip if already templated
+    if templated_files[filepath] then
+      return
+    end
+    
+    -- Check if buffer is empty
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local is_empty = #lines == 0 or (#lines == 1 and lines[1] == "")
+    
+    if not is_empty then
+      return
+    end
+    
+    -- Mark as templated to avoid re-triggering
+    templated_files[filepath] = true
+    
+    local filename = vim.fn.expand("%:t:r")  -- Get filename without extension
+    local package_name = get_package_name(filepath)
+    
+    -- File type options
+    local file_types = {
+      "class",
+      "interface", 
+      "abstract_class",
+      "enum",
+      "record",
+      "service",
+      "controller",
+      "repository",
+      "component",
+      "entity"
+    }
+    
+    local display_names = {
+      "Class",
+      "Interface",
+      "Abstract Class",
+      "Enum",
+      "Record",
+      "Service (Spring)",
+      "Controller (Spring)",
+      "Repository (Spring)",
+      "Component (Spring)",
+      "Entity (JPA)"
+    }
+    
+    -- Small delay to ensure buffer is ready
+    vim.defer_fn(function()
+      -- Prompt user for file type
+      vim.ui.select(display_names, {
+        prompt = "Select Java file type:",
+      }, function(choice, idx)
+        if not choice then
+          -- User cancelled, just insert package if available
+          if package_name then
+            vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+              "package " .. package_name .. ";",
+              "",
+              ""
+            })
+          end
+          return
+        end
+        
+        local file_type = file_types[idx]
+        local template = generate_java_template(file_type, filename, package_name)
+        
+        if template then
+          -- Insert template
+          vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, template)
+          
+          -- Move cursor to the blank line inside the class/interface
+          vim.api.nvim_win_set_cursor(0, {#template - 1, 4})
+          
+          -- Enter insert mode
+          vim.cmd("startinsert!")
+          
+          vim.notify("Created " .. choice .. ": " .. filename, vim.log.levels.INFO)
+        end
+      end)
+    end, 100)  -- 100ms delay
+  end,
+})
+
+-- Manual Java template generator command
+vim.api.nvim_create_user_command("JavaTemplate", function()
+  local filepath = vim.fn.expand("%:p")
+  local filename = vim.fn.expand("%:t:r")
+  local package_name = get_package_name(filepath)
+  
+  local file_types = {
+    "class",
+    "interface", 
+    "abstract_class",
+    "enum",
+    "record",
+    "service",
+    "controller",
+    "repository",
+    "component",
+    "entity"
+  }
+  
+  local display_names = {
+    "Class",
+    "Interface",
+    "Abstract Class",
+    "Enum",
+    "Record",
+    "Service (Spring)",
+    "Controller (Spring)",
+    "Repository (Spring)",
+    "Component (Spring)",
+    "Entity (JPA)"
+  }
+  
+  vim.ui.select(display_names, {
+    prompt = "Select Java file type:",
+  }, function(choice, idx)
+    if not choice then
+      return
+    end
+    
+    local file_type = file_types[idx]
+    local template = generate_java_template(file_type, filename, package_name)
+    
+    if template then
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, template)
+      vim.api.nvim_win_set_cursor(0, {#template - 1, 4})
+      vim.cmd("startinsert!")
+      vim.notify("Created " .. choice .. ": " .. filename, vim.log.levels.INFO)
+    end
+  end)
+end, {})
+
 -- ===== SMART RUN CURRENT FILE (WITH SPRING BOOT DETECTION) =====
 vim.keymap.set("n", "<leader>r", function()
   local filetype = vim.bo.filetype
@@ -187,29 +510,27 @@ vim.keymap.set("n", "<leader>r", function()
     vim.notify("Detected Spring Boot project - running with Maven/Gradle", vim.log.levels.INFO)
     
     if pom_xml ~= "" then
-      -- Maven project
       local project_root = vim.fn.fnamemodify(pom_xml, ":h")
-      vim.cmd("rightbelow vsplit | terminal cd " .. vim.fn.shellescape(project_root) .. " && ./mvnw spring-boot:run")
+      vim.cmd("botright split | terminal cd " .. vim.fn.shellescape(project_root) .. " && ./mvnw spring-boot:run")
     elseif build_gradle ~= "" then
-      -- Gradle project
       local project_root = vim.fn.fnamemodify(build_gradle, ":h")
-      vim.cmd("rightbelow vsplit | terminal cd " .. vim.fn.shellescape(project_root) .. " && ./gradlew bootRun")
+      vim.cmd("botright split | terminal cd " .. vim.fn.shellescape(project_root) .. " && ./gradlew bootRun")
     end
     
-    vim.cmd("vertical resize 80")
+    vim.cmd("resize 15")
     vim.cmd("setlocal bufhidden=wipe")
-    return  -- Exit early - we handled it!
+    return
   end
   
   -- FALLBACK: Original behavior for other file types
   if filetype == "php" then
-    vim.cmd("rightbelow vsplit | terminal php " .. filename)
-    vim.cmd("vertical resize 80")
+    vim.cmd("botright split | terminal php " .. filename)
+    vim.cmd("resize 15")
     vim.cmd("setlocal bufhidden=wipe")
     
   elseif filetype == "python" then
-    vim.cmd("rightbelow vsplit | terminal python " .. filename)
-    vim.cmd("vertical resize 80")
+    vim.cmd("botright split | terminal python " .. filename)
+    vim.cmd("resize 15")
     vim.cmd("setlocal bufhidden=wipe")
     
   elseif filetype == "java" then
@@ -230,14 +551,14 @@ vim.keymap.set("n", "<leader>r", function()
         end
       end
       
-      vim.cmd("rightbelow vsplit | terminal cd " .. vim.fn.shellescape(source_root) .. 
+      vim.cmd("botright split | terminal cd " .. vim.fn.shellescape(source_root) .. 
               " && javac " .. package_path .. class_name .. ".java" ..
               " && java " .. package_match .. "." .. class_name)
     else
-      vim.cmd("rightbelow vsplit | terminal javac " .. filename .. " && java " .. class_name)
+      vim.cmd("botright split | terminal javac " .. filename .. " && java " .. class_name)
     end
     
-    vim.cmd("vertical resize 80")
+    vim.cmd("resize 15")
     vim.cmd("setlocal bufhidden=wipe")
     
   elseif filetype == "rust" then
@@ -257,41 +578,39 @@ vim.keymap.set("n", "<leader>r", function()
       end
       
       if has_bin_config then
-        vim.cmd("rightbelow vsplit | terminal cd " .. vim.fn.shellescape(project_root) .. " && cargo run --bin " .. bin_name)
+        vim.cmd("botright split | terminal cd " .. vim.fn.shellescape(project_root) .. " && cargo run --bin " .. bin_name)
       elseif string.find(filename, "^main%.rs$") or string.find(filepath, "/src/main%.rs$") then
-        vim.cmd("rightbelow vsplit | terminal cd " .. vim.fn.shellescape(project_root) .. " && cargo run")
+        vim.cmd("botright split | terminal cd " .. vim.fn.shellescape(project_root) .. " && cargo run")
       else
         local simple_exe_name = bin_name
-        vim.cmd("rightbelow vsplit | terminal cd " .. vim.fn.shellescape(project_root) .. " && rustc " .. vim.fn.shellescape(filepath) .. " -o /tmp/" .. simple_exe_name .. " && /tmp/" .. simple_exe_name)
+        vim.cmd("botright split | terminal cd " .. vim.fn.shellescape(project_root) .. " && rustc " .. vim.fn.shellescape(filepath) .. " -o /tmp/" .. simple_exe_name .. " && /tmp/" .. simple_exe_name)
       end
     else
       local simple_exe_name = vim.fn.fnamemodify(filename, ":t:r")
-      vim.cmd("rightbelow vsplit | terminal rustc " .. vim.fn.shellescape(filepath) .. " -o /tmp/" .. simple_exe_name .. " && /tmp/" .. simple_exe_name)
+      vim.cmd("botright split | terminal rustc " .. vim.fn.shellescape(filepath) .. " -o /tmp/" .. simple_exe_name .. " && /tmp/" .. simple_exe_name)
     end
     
-    vim.cmd("vertical resize 80")
+    vim.cmd("resize 15")
     vim.cmd("setlocal bufhidden=wipe")
   else
     print("No run command configured for filetype: " .. filetype)
   end
 end, { desc = "Smart run: Spring Boot (if Maven/Gradle) or single file" })
 
--- Spring Boot specific runner (explicit Maven/Gradle)
+-- Spring Boot specific runner
 vim.keymap.set("n", "<leader>rs", function()
   local pom_xml = vim.fn.findfile("pom.xml", ".;")
   local build_gradle = vim.fn.findfile("build.gradle", ".;")
   
   if pom_xml ~= "" then
-    -- Maven project
     local project_root = vim.fn.fnamemodify(pom_xml, ":h")
-    vim.cmd("rightbelow vsplit | terminal cd " .. vim.fn.shellescape(project_root) .. " && ./mvnw spring-boot:run")
-    vim.cmd("vertical resize 80")
+    vim.cmd("botright split | terminal cd " .. vim.fn.shellescape(project_root) .. " && ./mvnw spring-boot:run")
+    vim.cmd("resize 15")
     vim.cmd("setlocal bufhidden=wipe")
   elseif build_gradle ~= "" then
-    -- Gradle project
     local project_root = vim.fn.fnamemodify(build_gradle, ":h")
-    vim.cmd("rightbelow vsplit | terminal cd " .. vim.fn.shellescape(project_root) .. " && ./gradlew bootRun")
-    vim.cmd("vertical resize 80")
+    vim.cmd("botright split | terminal cd " .. vim.fn.shellescape(project_root) .. " && ./gradlew bootRun")
+    vim.cmd("resize 15")
     vim.cmd("setlocal bufhidden=wipe")
   else
     vim.notify("No Maven or Gradle project found", vim.log.levels.ERROR)
@@ -303,15 +622,25 @@ vim.keymap.set("n", "<leader>rt", function()
   local pom_xml = vim.fn.findfile("pom.xml", ".;")
   if pom_xml ~= "" then
     local project_root = vim.fn.fnamemodify(pom_xml, ":h")
-    vim.cmd("rightbelow vsplit | terminal cd " .. vim.fn.shellescape(project_root) .. " && ./mvnw test")
-    vim.cmd("vertical resize 80")
+    vim.cmd("botright split | terminal cd " .. vim.fn.shellescape(project_root) .. " && ./mvnw test")
+    vim.cmd("resize 15")
     vim.cmd("setlocal bufhidden=wipe")
   else
     vim.notify("No Maven project found", vim.log.levels.ERROR)
   end
 end, { desc = "Run Maven tests" })
 
--- Add this to exit terminal mode with Esc
+-- Kill Spring Boot server
+vim.keymap.set("n", "<leader>rk", function()
+  vim.cmd("botright split | terminal sudo fuser -k 8080/tcp")
+  vim.cmd("resize 10")
+  vim.defer_fn(function()
+    vim.cmd("close")
+  end, 2000)
+  vim.notify("Killed Spring Boot server on port 8080", vim.log.levels.INFO)
+end, { desc = "Kill Spring Boot server" })
+
+-- Terminal mode keymaps
 vim.keymap.set("t", "<Esc>", [[<C-\><C-n>]], { desc = "Exit terminal mode" })
 
 -- Press Enter in terminal normal mode to close the terminal
@@ -323,7 +652,7 @@ vim.keymap.set("n", "<CR>", function()
   end
 end, { desc = "Close terminal with Enter (in terminal buffers)" })
 
--- Auto change directory to project root for Rust files AND handle binaries
+-- Auto change directory to project root for Rust files
 vim.api.nvim_create_autocmd("BufEnter", {
   pattern = "*.rs",
   callback = function()
@@ -402,8 +731,81 @@ vim.api.nvim_create_autocmd("BufEnter", {
   end,
 })
 
--- Manual reload command for stubborn cases
+-- Manual LSP restart
 vim.keymap.set("n", "<leader>rr", function()
   vim.cmd("LspRestart rust_analyzer")
   vim.notify("Manually restarted rust-analyzer", vim.log.levels.INFO)
 end, { desc = "Restart rust-analyzer" })
+
+-- Maven reload after pom.xml changes
+vim.keymap.set("n", "<leader>mr", function()
+  vim.cmd("LspRestart")
+  vim.notify("Restarted LSP servers", vim.log.levels.INFO)
+end, { desc = "Restart LSP (for pom.xml changes)" })
+
+-- ===== JAVA AUTO-IMPORT AND ORGANIZE IMPORTS =====
+-- Auto-organize imports on save for Java files
+vim.api.nvim_create_autocmd("BufWritePre", {
+  pattern = "*.java",
+  callback = function()
+    -- Check if jdtls is available
+    local clients = vim.lsp.get_active_clients({ bufnr = 0 })
+    for _, client in ipairs(clients) do
+      if client.name == "jdtls" then
+        require('jdtls').organize_imports()
+        break
+      end
+    end
+  end,
+})
+
+-- Manual organize imports keymap for Java files
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "java",
+  callback = function()
+    local opts = { buffer = true, silent = true }
+    
+    -- Organize imports manually
+    vim.keymap.set("n", "<leader>i", function()
+      require('jdtls').organize_imports()
+    end, vim.tbl_extend("force", opts, { desc = "Organize imports" }))
+    
+    -- Alternative: <leader>io for organize imports
+    vim.keymap.set("n", "<leader>io", function()
+      require('jdtls').organize_imports()
+    end, vim.tbl_extend("force", opts, { desc = "Organize imports" }))
+  end,
+})
+
+-- ===== INSTANT BUFFER SWITCHING =====
+-- Helper function for instant buffer switching
+local function jump_to_buffer(index)
+  local buffers = vim.fn.getbufinfo({buflisted = 1})
+  if index <= #buffers and index > 0 then
+    local target_buf = buffers[index].bufnr
+    vim.api.nvim_set_current_buf(target_buf)
+  else
+    vim.notify("Buffer " .. index .. " doesn't exist (only " .. #buffers .. " buffers open)", vim.log.levels.WARN)
+  end
+end
+
+-- Alt + number (1-9) for INSTANT buffer switching
+for i = 1, 9 do
+  vim.keymap.set("n", "<M-" .. i .. ">", function()
+    jump_to_buffer(i)
+  end, { 
+    desc = "Jump to buffer " .. i, 
+    silent = true,
+    noremap = true
+  })
+end
+
+-- Buffer navigation helpers
+vim.keymap.set("n", "gtn", ":bnext<CR>", { desc = "Next buffer", silent = true })
+vim.keymap.set("n", "gtp", ":bprevious<CR>", { desc = "Previous buffer", silent = true })
+
+-- Smart buffer delete
+vim.keymap.set("n", "<leader>bd", ":bp|bd #<CR>", { desc = "Delete current buffer", silent = true })
+
+-- Telescope buffer picker
+vim.keymap.set("n", "<leader>b", ":Telescope buffers<CR>", { desc = "List all buffers", silent = true })
