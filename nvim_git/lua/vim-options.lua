@@ -35,6 +35,29 @@ if vim.fn.isdirectory(undodir) == 0 then
   vim.fn.mkdir(undodir, "p")
 end
 
+-- ===== AUTO-SAVE FOR CLAUDE CODE =====
+-- Enable auto-save when switching buffers/windows
+vim.opt.autowrite = true
+vim.opt.autowriteall = true
+
+-- Save all files when focus is lost (switching to Claude terminal)
+vim.api.nvim_create_autocmd("FocusLost", {
+  pattern = "*",
+  callback = function()
+    vim.cmd("silent! wall")
+  end,
+})
+
+-- Save current file when leaving buffer
+vim.api.nvim_create_autocmd("BufLeave", {
+  pattern = "*",
+  callback = function()
+    if vim.bo.modified and not vim.bo.readonly and vim.fn.expand("%") ~= "" and vim.bo.buftype == "" then
+      vim.cmd("silent! write")
+    end
+  end,
+})
+
 -- ===== SMART ARROW KEYS & TOUCHPAD CONTROL =====
 
 -- Disable arrow keys and force proper vim navigation
@@ -138,25 +161,43 @@ vim.keymap.set("n", "<C-l>", function()
   update_mouse_for_window()
 end, { desc = "Move to right window" })
 
--- Terminal mode navigation with mouse update
+-- Terminal mode navigation with mouse update (PROPERLY FIXED)
 vim.keymap.set("t", "<C-h>", function()
-  vim.cmd([[normal! <C-\><C-n><C-w>h]])
-  update_mouse_for_window()
+  -- Properly exit terminal mode using feedkeys
+  local escape = vim.api.nvim_replace_termcodes([[<C-\><C-n>]], true, true, true)
+  vim.api.nvim_feedkeys(escape, 'n', false)
+  -- Small delay to ensure we've exited terminal mode
+  vim.defer_fn(function()
+    vim.cmd("wincmd h")
+    update_mouse_for_window()
+  end, 10)
 end, { desc = "Move to left window from terminal" })
 
 vim.keymap.set("t", "<C-j>", function()
-  vim.cmd([[normal! <C-\><C-n><C-w>j]])
-  update_mouse_for_window()
+  local escape = vim.api.nvim_replace_termcodes([[<C-\><C-n>]], true, true, true)
+  vim.api.nvim_feedkeys(escape, 'n', false)
+  vim.defer_fn(function()
+    vim.cmd("wincmd j")
+    update_mouse_for_window()
+  end, 10)
 end, { desc = "Move to window below from terminal" })
 
 vim.keymap.set("t", "<C-k>", function()
-  vim.cmd([[normal! <C-\><C-n><C-w>k]])
-  update_mouse_for_window()
+  local escape = vim.api.nvim_replace_termcodes([[<C-\><C-n>]], true, true, true)
+  vim.api.nvim_feedkeys(escape, 'n', false)
+  vim.defer_fn(function()
+    vim.cmd("wincmd k")
+    update_mouse_for_window()
+  end, 10)
 end, { desc = "Move to window above from terminal" })
 
 vim.keymap.set("t", "<C-l>", function()
-  vim.cmd([[normal! <C-\><C-n><C-w>l]])
-  update_mouse_for_window()
+  local escape = vim.api.nvim_replace_termcodes([[<C-\><C-n>]], true, true, true)
+  vim.api.nvim_feedkeys(escape, 'n', false)
+  vim.defer_fn(function()
+    vim.cmd("wincmd l")
+    update_mouse_for_window()
+  end, 10)
 end, { desc = "Move to right window from terminal" })
 
 -- Manual toggle keybinding (for testing or override)
@@ -806,6 +847,7 @@ vim.keymap.set("n", "gtp", ":bprevious<CR>", { desc = "Previous buffer", silent 
 
 -- Smart buffer delete
 vim.keymap.set("n", "<leader>bd", ":bp|bd #<CR>", { desc = "Delete current buffer", silent = true })
+
 
 -- Telescope buffer picker
 vim.keymap.set("n", "<leader>b", ":Telescope buffers<CR>", { desc = "List all buffers", silent = true })

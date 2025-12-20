@@ -1,111 +1,146 @@
 -- lua/plugins/claude-code.lua
 -- Claude Code integration using coder/claudecode.nvim
--- This provides a similar experience to CopilotChat but with Claude Code
 return {
   {
     "coder/claudecode.nvim",
+    dependencies = {
+      "folke/snacks.nvim"
+    },
     config = function()
       require("claudecode").setup({
-        -- Terminal configuration (vertical split like your Copilot setup)
+        -- Terminal configuration (vertical split)
         terminal = {
-          provider = "nvim",  -- Use built-in Neovim terminal
-          provider_opts = {
-            position = "vertical",  -- Vertical split
-            size = 80,  -- 80 columns wide
-          },
+          split_side = "right",
+          split_width_percentage = 0.35,
+          provider = "auto",
+          auto_close = true,
         },
         
-        -- Auto-reload files modified by Claude Code
-        auto_reload = true,
+        -- Selection tracking (REQUIRED for ClaudeCodeSend)
+        track_selection = true,
         
-        -- Show notifications
-        notifications = {
-          enabled = true,
+        -- Diff integration
+        diff_opts = {
+          auto_close_on_accept = true,
+          vertical_split = true,
         },
       })
     end,
     
     keys = {
-      -- Main toggle (similar to <leader>cc for Copilot)
+      -- ===== MAIN TOGGLE =====
+      -- Normal and Visual mode
       {
-        "<leader>ac",
+        "<C-\\>",
         "<cmd>ClaudeCode<cr>",
         desc = "Toggle Claude Code",
         mode = { "n", "v" }
       },
       
-      -- Continue previous conversation
+      -- Terminal mode (special handling to exit terminal first)
       {
-        "<leader>aC",
+        "<C-\\>",
+        function()
+          -- Exit terminal mode first
+          local escape = vim.api.nvim_replace_termcodes([[<C-\><C-n>]], true, true, true)
+          vim.api.nvim_feedkeys(escape, 'n', false)
+          -- Then toggle Claude
+          vim.defer_fn(function()
+            vim.cmd("ClaudeCode")
+          end, 10)
+        end,
+        desc = "Toggle Claude Code from terminal",
+        mode = { "t" }
+      },
+      
+      {
+        "<leader>cf",
+        "<cmd>ClaudeCodeFocus<cr>",
+        desc = "Focus Claude Code",
+        mode = { "n" }
+      },
+      
+      {
+        "<leader>cc",
         "<cmd>ClaudeCode --continue<cr>",
-        desc = "Continue Claude Code conversation"
+        desc = "Continue Claude conversation",
+        mode = { "n", "v" }
       },
       
-      -- Quick ask with current file context
+      -- ===== SEND TO CLAUDE =====
       {
-        "<leader>aq",
+        "<leader>cs",
+        "<cmd>ClaudeCodeSend<cr>",
+        desc = "Send selection to Claude",
+        mode = { "v" }
+      },
+      
+      {
+        "<leader>cd",
+        "<cmd>ClaudeCodeAdd %<cr>",
+        desc = "Add current file to Claude context",
+        mode = { "n" }
+      },
+      
+      -- ===== QUICK ASK =====
+      {
+        "<leader>cq",
         function()
-          local question = vim.fn.input("Ask Claude Code: ")
+          local question = vim.fn.input("Ask Claude: ")
           if question ~= "" then
-            vim.cmd(string.format("ClaudeCode %s", vim.fn.shellescape(question)))
+            vim.fn.setreg('c', question)
+            vim.cmd("ClaudeCode")
+            vim.notify("Question saved! In Claude terminal, press: i then Ctrl+r c", vim.log.levels.INFO, {
+              title = "Claude Code",
+              timeout = 3000,
+            })
           end
         end,
-        desc = "Quick ask Claude Code"
+        desc = "Quick ask (saves to @c, paste with Ctrl+r c)",
+        mode = { "n" }
       },
       
-      -- Ask about visual selection
+      -- Visual mode quick ask with code
       {
-        "<leader>aq",
+        "<leader>cq",
         function()
-          local question = vim.fn.input("Ask about selection: ")
-          if question ~= "" then
-            vim.cmd(string.format("ClaudeCode %s", vim.fn.shellescape(question)))
-          end
+          vim.cmd("ClaudeCodeSend")
+          vim.defer_fn(function()
+            local question = vim.fn.input("Ask about selection: ")
+            if question ~= "" then
+              vim.fn.setreg('c', question)
+              vim.notify("Question saved! In Claude terminal: i then Ctrl+r c", vim.log.levels.INFO, {
+                title = "Claude Code",
+                timeout = 3000,
+              })
+            end
+          end, 500)
         end,
-        mode = "v",
-        desc = "Ask Claude Code about selection"
+        desc = "Send code + ask question",
+        mode = { "v" }
       },
       
-      -- Code review
+      -- ===== DIFF MANAGEMENT =====
       {
-        "<leader>ar",
-        "<cmd>ClaudeCode Review this code for potential issues and improvements<cr>",
-        desc = "Review with Claude Code"
+        "<leader>cA",
+        "<cmd>ClaudeCodeDiffAccept<cr>",
+        desc = "Accept Claude's changes",
+        mode = { "n" }
       },
       
-      -- Code explanation
       {
-        "<leader>ae",
-        "<cmd>ClaudeCode Explain what this code does<cr>",
-        desc = "Explain with Claude Code"
+        "<leader>cD",
+        "<cmd>ClaudeCodeDiffDeny<cr>",
+        desc = "Reject Claude's changes",
+        mode = { "n" }
       },
       
-      -- Optimize code
+      -- ===== MODEL SELECTION =====
       {
-        "<leader>ao",
-        "<cmd>ClaudeCode Optimize this code for better performance and readability<cr>",
-        desc = "Optimize with Claude Code"
-      },
-      
-      -- Fix issues
-      {
-        "<leader>af",
-        "<cmd>ClaudeCode Fix any issues in this code<cr>",
-        desc = "Fix with Claude Code"
-      },
-      
-      -- Generate tests
-      {
-        "<leader>at",
-        "<cmd>ClaudeCode Generate tests for this code<cr>",
-        desc = "Generate tests with Claude Code"
-      },
-      
-      -- Add documentation
-      {
-        "<leader>ad",
-        "<cmd>ClaudeCode Add documentation comments to this code<cr>",
-        desc = "Document with Claude Code"
+        "<leader>cm",
+        "<cmd>ClaudeCodeSelectModel<cr>",
+        desc = "Select Claude model",
+        mode = { "n" }
       },
     },
   },
